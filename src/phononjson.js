@@ -346,6 +346,7 @@ export class PhononJson {
 
     invalidateEigenvectorCaches() {
         this.atomTypeWeightsCache = null;
+        this.computeChiralProperties();
     }
 
     canComputeEigenvectorsOnDemand() {
@@ -719,6 +720,18 @@ export class PhononJson {
         this.mode_amplitude_convention = data["mode_amplitude_convention"];
         this.dynamical_matrix = data["dynamical_matrix"] || null;
         this.masses = data["masses"] || (this.dynamical_matrix ? this.dynamical_matrix.masses : null);
+        this.cycloidicity_x = data["cycloidicity_x"] || null;
+        this.cycloidicity_y = data["cycloidicity_y"] || null;
+        this.cycloidicity_z = data["cycloidicity_z"] || null;
+        this.angular_momentum_x = data["angular_momentum_x"] || null;
+        this.angular_momentum_y = data["angular_momentum_y"] || null;
+        this.angular_momentum_z = data["angular_momentum_z"] || null;
+        this.helicity = data["helicity"] || null;
+        this.pam_spin = data["pam_spin"] || null;
+        this.pam_orbital = data["pam_orbital"] || null;
+        this.pam_total = data["pam_total"] || null;
+        this.magnetic_moment = data["magnetic_moment"] || null;
+        
         if (this.dynamical_matrix && !this.dynamical_matrix.primitive_lattice && this.lat) {
             this.dynamical_matrix.primitive_lattice = this.lat;
         }
@@ -1071,4 +1084,62 @@ export class PhononJson {
         }
     }
 
+    computeChiralProperties() {
+        if (!this.vec || !this.vec.length) return;
+
+        let nqpoints = this.kpoints.length;
+        let nbands = this.eigenvalues[0].length;
+        let natoms = this.natoms;
+
+        let Jx = new Array(nqpoints).fill(0).map(() => new Array(nbands).fill(0));
+        let Jy = new Array(nqpoints).fill(0).map(() => new Array(nbands).fill(0));
+        let Jz = new Array(nqpoints).fill(0).map(() => new Array(nbands).fill(0));
+        
+        let Cx = new Array(nqpoints).fill(0).map(() => new Array(nbands).fill(0));
+        let Cy = new Array(nqpoints).fill(0).map(() => new Array(nbands).fill(0));
+        let Cz = new Array(nqpoints).fill(0).map(() => new Array(nbands).fill(0));
+
+        let helicity = new Array(nqpoints).fill(0).map(() => new Array(nbands).fill(0));
+
+        for (let iq=0; iq<nqpoints; iq++) {
+            let k_x = this.kpoints[iq][0], k_y = this.kpoints[iq][1], k_z = this.kpoints[iq][2];
+            let norm_k = Math.sqrt(k_x*k_x + k_y*k_y + k_z*k_z);
+            if (norm_k > 1e-8) {
+                k_x /= norm_k; k_y /= norm_k; k_z /= norm_k;
+            } else {
+                k_x = 0; k_y = 0; k_z = 0;
+            }
+
+            for (let ibnd=0; ibnd<nbands; ibnd++) {
+                let lx = 0, ly = 0, lz = 0;
+                for (let iat=0; iat<natoms; iat++) {
+                    let v = this.vec[iq][ibnd][iat];
+                    let rx = v[0][0], ix = v[0][1];
+                    let ry = v[1][0], iy = v[1][1];
+                    let rz = v[2][0], iz = v[2][1];
+
+                    lx += 2 * (ry * iz - iy * rz);
+                    ly += 2 * (rz * ix - iz * rx);
+                    lz += 2 * (rx * iy - ix * ry);
+                }
+                Jx[iq][ibnd] = lx;
+                Jy[iq][ibnd] = ly;
+                Jz[iq][ibnd] = lz;
+
+                Cx[iq][ibnd] = k_y * lz - k_z * ly;
+                Cy[iq][ibnd] = k_z * lx - k_x * lz;
+                Cz[iq][ibnd] = k_x * ly - k_y * lx;
+
+                helicity[iq][ibnd] = k_x * lx + k_y * ly + k_z * lz;
+            }
+        }
+        
+        this.angular_momentum_x = Jx;
+        this.angular_momentum_y = Jy;
+        this.angular_momentum_z = Jz;
+        this.cycloidicity_x = Cx;
+        this.cycloidicity_y = Cy;
+        this.cycloidicity_z = Cz;
+        this.helicity = helicity;
+    }
 }

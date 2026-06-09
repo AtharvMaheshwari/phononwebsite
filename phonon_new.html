@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>TSS Physics - Phonons (New)</title>
+    <meta name="author" content="Henrique Miranda, Raoul Weber">
+    <meta name="copyright" content="2014 Theoretical Solid-State Physics Group of University of Luxembourg">
+    <meta http-equiv="content-language" content="text/html; charset=utf-8; en">
+    <meta name="title" content="Theoretical Solid-State Physics: Phonon visualizations (New)">
+    <meta name="description" content="Interactive website for the visualization of phonons with chiral properties.">
+    <meta name="keywords" content="University of Luxembourg, theoretical solid-state physics, phonons, chirality, angular momentum">
+    <meta name="Title" content="Phonon animation">
+    <meta name="Format" content="text/html">
+    <meta name="Language" content="en">
+    <meta charset="utf-8">
+
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="stylesheet" type="text/css" href="css/style.css">
+
+    <!-- Extra styles for the new chiral properties panel -->
+    <style>
+        /* ── Chiral panel sits below the dispersion plot ── */
+        .flex-chiral-panel {
+            width: 100%;
+            padding: 10px 0 0 0;
+            box-sizing: border-box;
+        }
+
+        #chiral-panel {
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 10px 14px;
+            background: #fafafa;
+            font-size: 13px;
+        }
+
+        #chiral-panel h3 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 4px;
+        }
+
+        /* Grid of property cards */
+        .chiral-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .chiral-card {
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 3px;
+            padding: 7px 10px;
+        }
+
+        .chiral-card-title {
+            font-weight: bold;
+            font-size: 12px;
+            color: #444;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .chiral-card-value {
+            font-family: monospace;
+            font-size: 13px;
+            color: #111;
+        }
+
+        /* Colour-coded value: positive=red, negative=blue, zero=grey */
+        .val-pos  { color: #c0392b; }
+        .val-neg  { color: #2980b9; }
+        .val-zero { color: #999;    }
+
+        /* Mini bar used to visualise a scalar in [-1, 1] */
+        .mini-bar-wrap {
+            width: 100%;
+            height: 6px;
+            background: #eee;
+            border-radius: 3px;
+            margin-top: 4px;
+            position: relative;
+        }
+        .mini-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            position: absolute;
+        }
+        .mini-bar-fill.positive {
+            background: #c0392b;
+            left: 50%;
+        }
+        .mini-bar-fill.negative {
+            background: #2980b9;
+            right: 50%;
+        }
+
+        /* Active-paths summary row */
+        .chiral-active-paths {
+            font-size: 12px;
+            color: #555;
+            margin-top: 4px;
+        }
+        .chiral-active-paths span {
+            display: inline-block;
+            background: #e8f4fd;
+            border: 1px solid #aad4f0;
+            border-radius: 3px;
+            padding: 1px 6px;
+            margin: 2px 3px 2px 0;
+            font-family: monospace;
+        }
+
+        /* Placeholder shown when no mode is selected yet */
+        #chiral-placeholder {
+            color: #999;
+            font-style: italic;
+            text-align: center;
+            padding: 12px 0;
+        }
+
+        /* Hide real content until a mode is clicked */
+        #chiral-content { display: none; }
+
+        /* Section header inside the panel */
+        .chiral-section-label {
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #888;
+            margin: 8px 0 4px 0;
+        }
+
+        /* Separator */
+        .chiral-sep {
+            border: none;
+            border-top: 1px solid #eee;
+            margin: 8px 0;
+        }
+
+        /* Mode info line at top of panel */
+        #chiral-mode-label {
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #333;
+        }
+    </style>
+
+    <script src="main.min.js" type="module"></script>
+</head>
+
+<body>
+    <div class="container">
+        <ul class="navigation">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="phonon.html">Phonons</a></li>
+            <li><a href="phonon_new.html" class="active">Phonons (New)</a></li>
+            <li><a href="exciton.html">Excitons</a></li>
+            <li><a href="structure.html">Structures</a></li>
+        </ul>
+
+        <div class="material-name"><h1 id="name">Material</h1></div>
+
+        <div class="flex-container">
+
+            <!-- ── Left menu: identical to phonon.html ── -->
+            <div class="flex-menu">
+                <div id="menu">
+                <div id="material-list">
+                    <h3>Materials:</h3>
+                    <input id="materials_filter" type="text" placeholder="Filter materials or elements, e.g. Be C">
+                    <ul id="mat"></ul>
+                    <ul id="ref"></ul>
+                </div>
+
+                <div id="options-list">
+                    <div>
+                        <h3>Custom file:</h3>
+                        <input type="file" id="file-input" name="customfile"/>
+                    </div>
+
+                    <div>
+                        <h3>Lattice parameters (Ångström):</h3>
+                        <table id="lattice"></table>
+                    </div>
+
+                    <div>
+                        <h3>Atomic positions (reduced):</h3>
+                        <div>
+                            <table id="atompos"></table>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3>Repetitions:</h3>
+                        <input id="nx" value="3" type="number">
+                        <input id="ny" value="3" type="number">
+                        <input id="nz" value="3" type="number">
+                        <button id="update" type="button">update</button>
+                    </div>
+
+                    <div>
+                        <h3>Mode selection:</h3>
+                        k-index <input id="kindex" value="1" type="number">
+                        band <input id="nindex" value="1" type="number">
+                        <button id="modeselect" type="button">apply</button>
+                    </div>
+
+                    <div style="display: table;">
+                        <div style="display: table-cell; padding-right: 5px;">
+                            <h3>Camera:</h3>
+                            <button id="camerax" type="button">x</button>
+                            <button id="cameray" type="button">y</button>
+                            <button id="cameraz" type="button">z</button>
+                        </div>
+                        <div style="display: table-cell; padding-right: 5px;">
+                            <h3>Cell:</h3>
+                            <input id="drawcell" type="checkbox">on</input>
+                        </div>
+                        <div style="display: table-cell;">
+                            <h3>Export movie:</h3>
+                            <button id="gifbutton"  type="button">gif</button>
+                            <button id="webmbutton" type="button">webm</button>
+                            <div id="progress"></div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <input id="mode_weights_plot" type="checkbox">mode weights</input>
+                        <input id="drawshading" type="checkbox" checked>shading</input>
+                    </div>
+
+                    <div>
+                        <h3>Amplitude:</h3>
+                        <input id="amplitude_range" type="range">
+                        <input id="amplitude_box"   type="number">
+                    </div>
+
+                    <div>
+                        <h3>Speed:</h3>
+                        <input id="speed_range" type="range">
+                        <button id="playpause" type="button">pause</button>
+                    </div>
+
+                    <div class="advanced-appearance">
+                        <div class="appearance-subsection">Atom</div>
+                        <div class="appearance-row">
+                            <label for="displaystyle">display</label>
+                            <select id='displaystyle'>
+                              <option value="jmol">Jmol</option>
+                              <option value="vesta">Vesta</option>
+                            </select>
+                        </div>
+                        <div class="appearance-row">
+                            <label for="appearance_atom_list">type</label>
+                            <div id="appearance_atom_list" class="appearance-atom-list"></div>
+                        </div>
+                        <div class="appearance-row">
+                            <label for="atom_color_input">color</label>
+                            <input id="atom_color_input" type="color">
+                        </div>
+                        <div class="appearance-row">
+                            <label for="atom_radius_input">radius</label>
+                            <div class="appearance-controls">
+                                <input id="atom_radius_input" type="number" min="0.1" max="5.0" step="0.05" value="1.0">
+                                <button id="appearance_reset_atom_button" type="button">reset</button>
+                            </div>
+                        </div>
+                        <div class="appearance-subsection">Bonds</div>
+                        <div class="appearance-row">
+                            <label for="bond_color_input">color</label>
+                            <div class="appearance-controls">
+                                <input id="bond_color_input" type="color">
+                                <button id="appearance_reset_bonds_button" type="button">reset</button>
+                            </div>
+                        </div>
+                        <div class="appearance-row">
+                            <label for="bond_radius_input">radius</label>
+                            <input id="bond_radius_input" type="number" min="0.01" max="1.0" step="0.01" value="0.1">
+                        </div>
+                        <div class="appearance-row">
+                            <label for="bond_color_by_atom_checkbox">split colors</label>
+                            <div class="appearance-controls">
+                                <input id="bond_color_by_atom_checkbox" type="checkbox">on</input>
+                            </div>
+                        </div>
+                        <div class="appearance-row">
+                            <label for="bond_rules_list">types</label>
+                            <div id="bond_rules_list"></div>
+                        </div>
+                        <div class="appearance-row">
+                            <label for="bond_add_atom_a">bond</label>
+                            <div class="appearance-controls">
+                                <select id="bond_add_atom_a"></select>
+                                <select id="bond_add_atom_b"></select>
+                                <input id="bond_add_cutoff_input" type="number" min="0.01" step="0.01" placeholder="max">
+                                <button id="bond_add_button" type="button">add</button>
+                            </div>
+                        </div>
+
+                        <div class="appearance-subsection">Vectors</div>
+                        <div class="appearance-row">
+                            <label for="arrow_color_input">color</label>
+                            <input id="arrow_color_input" type="color">
+                        </div>
+                        <div class="appearance-row">
+                            <label for="drawvectors">visible</label>
+                            <div class="appearance-controls">
+                                <input id="drawvectors" type="checkbox">on</input>
+                            </div>
+                        </div>
+                        <div class="appearance-row">
+                            <label for="vectors_amplitude_range">size</label>
+                            <input id="vectors_amplitude_range" type="range">
+                        </div>
+                        <div class="appearance-row">
+                            <label for="arrow_radius_input">radius</label>
+                            <div class="appearance-controls">
+                                <input id="arrow_radius_input" type="number" min="0.01" max="1.0" step="0.01" value="0.1">
+                                <button id="appearance_reset_vectors_button" type="button">reset</button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                </div>
+            </div>
+            <!-- ── End left menu ── -->
+
+            <!-- ── Centre: 3D crystal viewer ── -->
+            <div class="flex-vibcrystal">
+                <div id="vibcrystal"></div>
+            </div>
+
+            <!-- ── Right: dispersion plot ── -->
+            <div class="flex-highcharts">
+                <div id="highcharts"></div>
+
+                <!-- ══ NEW: Chiral properties panel, below the dispersion ══ -->
+                <div class="flex-chiral-panel">
+                    <div id="chiral-panel">
+                        <h3>Chiral Properties</h3>
+
+                        <!-- Shown before any mode is selected -->
+                        <div id="chiral-placeholder">
+                            Click a point on the dispersion to see properties for that mode.
+                        </div>
+
+                        <!-- Hidden until a mode is selected -->
+                        <div id="chiral-content">
+
+                            <!-- Which mode we are looking at -->
+                            <div id="chiral-mode-label">
+                                <!-- e.g. "k-point 12 · band 3 · 45.2 cm⁻¹" -->
+                            </div>
+
+                            <!-- Active paths summary (populated from JSON metadata) -->
+                            <div class="chiral-section-label">Symmetry-allowed paths</div>
+                            <div class="chiral-active-paths" id="chiral-active-paths">
+                                <!-- Jz, Jx, Jy, PAM path labels injected here -->
+                            </div>
+
+                            <hr class="chiral-sep">
+
+                            <!-- Angular momentum -->
+                            <div class="chiral-section-label">Phonon Angular Momentum</div>
+                            <div class="chiral-grid">
+                                <div class="chiral-card">
+                                    <div class="chiral-card-title">J<sub>x</sub></div>
+                                    <div class="chiral-card-value" id="chiral-jx">—</div>
+                                    <div class="mini-bar-wrap">
+                                        <div class="mini-bar-fill" id="chiral-jx-bar"></div>
+                                    </div>
+                                </div>
+                                <div class="chiral-card">
+                                    <div class="chiral-card-title">J<sub>y</sub></div>
+                                    <div class="chiral-card-value" id="chiral-jy">—</div>
+                                    <div class="mini-bar-wrap">
+                                        <div class="mini-bar-fill" id="chiral-jy-bar"></div>
+                                    </div>
+                                </div>
+                                <div class="chiral-card">
+                                    <div class="chiral-card-title">J<sub>z</sub></div>
+                                    <div class="chiral-card-value" id="chiral-jz">—</div>
+                                    <div class="mini-bar-wrap">
+                                        <div class="mini-bar-fill" id="chiral-jz-bar"></div>
+                                    </div>
+                                </div>
+                                <div class="chiral-card">
+                                    <div class="chiral-card-title">Helicity</div>
+                                    <div class="chiral-card-value" id="chiral-helicity">—</div>
+                                    <div class="mini-bar-wrap">
+                                        <div class="mini-bar-fill" id="chiral-helicity-bar"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- PAM -->
+                            <div class="chiral-section-label">Pseudo-Angular Momentum (PAM)</div>
+                            <div class="chiral-grid">
+                                <div class="chiral-card">
+                                    <div class="chiral-card-title">Spin</div>
+                                    <div class="chiral-card-value" id="chiral-pam-spin">—</div>
+                                </div>
+                                <div class="chiral-card">
+                                    <div class="chiral-card-title">Orbital</div>
+                                    <div class="chiral-card-value" id="chiral-pam-orbital">—</div>
+                                </div>
+                                <div class="chiral-card">
+                                    <div class="chiral-card-title">Total</div>
+                                    <div class="chiral-card-value" id="chiral-pam-total">—</div>
+                                </div>
+                            </div>
+
+                            <!-- Cycloidicity -->
+                            <div class="chiral-section-label">Cycloidicity (P = k̂ × J)</div>
+                            <div class="chiral-grid">
+                                <div class="chiral-card">
+                                    <div class="chiral-card-title">C<sub>x</sub></div>
+                                    <div class="chiral-card-value" id="chiral-cx">—</div>
+                                    <div class="mini-bar-wrap">
+                                        <div class="mini-bar-fill" id="chiral-cx-bar"></div>
+                                    </div>
+                                </div>
+                                <div class="chiral-card">
+                                    <div class="chiral-card-title">C<sub>y</sub></div>
+                                    <div class="chiral-card-value" id="chiral-cy">—</div>
+                                    <div class="mini-bar-wrap">
+                                        <div class="mini-bar-fill" id="chiral-cy-bar"></div>
+                                    </div>
+                                </div>
+                                <div class="chiral-card">
+                                    <div class="chiral-card-title">C<sub>z</sub></div>
+                                    <div class="chiral-card-value" id="chiral-cz">—</div>
+                                    <div class="mini-bar-wrap">
+                                        <div class="mini-bar-fill" id="chiral-cz-bar"></div>
+                                    </div>
+                                </div>
+                                <div class="chiral-card">
+                                    <div class="chiral-card-title">|C|</div>
+                                    <div class="chiral-card-value" id="chiral-cmag">—</div>
+                                </div>
+                            </div>
+
+                            <!-- Phonon magnetic moment (only shown if BORN data present) -->
+                            <div class="chiral-section-label" id="chiral-mag-section" style="display:none;">
+                                Phonon Magnetic Moment
+                            </div>
+                            <div class="chiral-grid" id="chiral-mag-grid" style="display:none;">
+                                <div class="chiral-card">
+                                    <div class="chiral-card-title">M<sub>x</sub></div>
+                                    <div class="chiral-card-value" id="chiral-mx">—</div>
+                                </div>
+                                <div class="chiral-card">
+                                    <div class="chiral-card-title">M<sub>y</sub></div>
+                                    <div class="chiral-card-value" id="chiral-my">—</div>
+                                </div>
+                                <div class="chiral-card">
+                                    <div class="chiral-card-title">M<sub>z</sub></div>
+                                    <div class="chiral-card-value" id="chiral-mz">—</div>
+                                </div>
+                                <div class="chiral-card">
+                                    <div class="chiral-card-title">|M|</div>
+                                    <div class="chiral-card-value" id="chiral-mmag">—</div>
+                                </div>
+                            </div>
+
+                        </div>
+                        <!-- end #chiral-content -->
+
+                    </div>
+                    <!-- end #chiral-panel -->
+                </div>
+                <!-- end .flex-chiral-panel -->
+
+            </div>
+            <!-- end .flex-highcharts -->
+
+        </div>
+        <!-- end .flex-container -->
+    </div>
+    <!-- end .container -->
+
+    <!-- ══ Chiral panel JS — reads data from the loaded JSON ══ -->
+    <script type="module">
+    /**
+     * chiralPanel.js (inline for now)
+     *
+     * Hooks into whatever event the existing JS fires when a mode is selected
+     * on the dispersion plot and populates the chiral properties panel.
+     *
+     * Convention used in the JSON (to be produced by Python):
+     *
+     *   data.angular_momentum  [nq][nband][3]   Jx, Jy, Jz
+     *   data.pam               [nq][nband][3]   spin, orbital, total
+     *   data.helicity          [nq][nband]
+     *   data.cycloidicity      [nq][nband][4]   Cx, Cy, Cz, |C|
+     *   data.magnetic_moment   [nq][nband][3]   Mx, My, Mz  (optional)
+     *   data.am_active_paths   {Jx:[], Jy:[], Jz:[], PAM:[]}
+     */
+
+    // ── helpers ──────────────────────────────────────────────────────────────
+
+    function fmt(v) {
+        if (v === null || v === undefined) return '—';
+        return v.toFixed(4);
+    }
+
+    function valClass(v) {
+        if (Math.abs(v) < 1e-6) return 'val-zero';
+        return v > 0 ? 'val-pos' : 'val-neg';
+    }
+
+    /**
+     * Update a scalar card: text + mini-bar.
+     * maxAbs is used to normalise the bar width (defaults to 1).
+     */
+    function setScalar(id, value, maxAbs = 1) {
+        const el = document.getElementById(id);
+        const bar = document.getElementById(id + '-bar');
+        if (!el) return;
+
+        if (value === null || value === undefined) {
+            el.textContent = '—';
+            el.className = 'chiral-card-value';
+            if (bar) { bar.style.width = '0'; }
+            return;
+        }
+
+        el.textContent = fmt(value);
+        el.className = 'chiral-card-value ' + valClass(value);
+
+        if (bar) {
+            const pct = Math.min(Math.abs(value) / (maxAbs || 1) * 50, 50); // max 50% of half-bar
+            bar.style.width = pct + '%';
+            bar.className = 'mini-bar-fill ' + (value >= 0 ? 'positive' : 'negative');
+        }
+    }
+
+    function setPlain(id, value) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (value === null || value === undefined) {
+            el.textContent = '—';
+            el.className = 'chiral-card-value';
+        } else {
+            el.textContent = fmt(value);
+            el.className = 'chiral-card-value ' + valClass(value);
+        }
+    }
+
+    // ── active-paths badge row ────────────────────────────────────────────────
+
+    function renderActivePaths(amActivePaths) {
+        const container = document.getElementById('chiral-active-paths');
+        if (!container) return;
+        container.innerHTML = '';
+
+        const labels = { Jz: 'J<sub>z</sub>', Jx: 'J<sub>x</sub>', Jy: 'J<sub>y</sub>', PAM: 'PAM' };
+        for (const [key, paths] of Object.entries(amActivePaths || {})) {
+            if (!paths || paths.length === 0) continue;
+            const label = labels[key] || key;
+            paths.forEach(p => {
+                const span = document.createElement('span');
+                span.innerHTML = label + ': ' + p;
+                container.appendChild(span);
+            });
+        }
+
+        if (container.children.length === 0) {
+            container.textContent = 'None found in JSON.';
+        }
+    }
+
+    // ── main update function ──────────────────────────────────────────────────
+
+    /**
+     * Call this whenever the user selects a mode.
+     *
+     * @param {object} data   - The full parsed JSON object
+     * @param {number} kIdx   - 0-based q-point index
+     * @param {number} bIdx   - 0-based band index
+     */
+    window.updateChiralPanel = function(data, kIdx, bIdx) {
+        document.getElementById('chiral-placeholder').style.display = 'none';
+        document.getElementById('chiral-content').style.display    = 'block';
+
+        // ── mode label ──
+        const freq = data.eigenvalues?.[kIdx]?.[bIdx];
+        const label = document.getElementById('chiral-mode-label');
+        label.textContent =
+            'k-point ' + (kIdx + 1) + '  ·  band ' + (bIdx + 1) +
+            (freq !== undefined ? '  ·  ' + freq.toFixed(2) + ' cm⁻¹' : '');
+
+        // ── active paths (shown once per material load, not per mode) ──
+        renderActivePaths(data.am_active_paths);
+
+        // ── angular momentum ──
+        const J = data.angular_momentum?.[kIdx]?.[bIdx];    // [Jx, Jy, Jz]
+        setScalar('chiral-jx', J?.[0]);
+        setScalar('chiral-jy', J?.[1]);
+        setScalar('chiral-jz', J?.[2]);
+
+        // ── helicity ──
+        const h = data.helicity?.[kIdx]?.[bIdx];
+        setScalar('chiral-helicity', h);
+
+        // ── PAM ──
+        const P = data.pam?.[kIdx]?.[bIdx];                 // [spin, orbital, total]
+        setPlain('chiral-pam-spin',    P?.[0]);
+        setPlain('chiral-pam-orbital', P?.[1]);
+        setPlain('chiral-pam-total',   P?.[2]);
+
+        // ── cycloidicity ──
+        const C = data.cycloidicity?.[kIdx]?.[bIdx];        // [Cx, Cy, Cz, |C|]
+        setScalar('chiral-cx',   C?.[0]);
+        setScalar('chiral-cy',   C?.[1]);
+        setScalar('chiral-cz',   C?.[2]);
+        setPlain('chiral-cmag',  C?.[3]);
+
+        // ── phonon magnetic moment (optional) ──
+        const M = data.magnetic_moment?.[kIdx]?.[bIdx];     // [Mx, My, Mz]
+        const hasMag = !!M;
+        document.getElementById('chiral-mag-section').style.display = hasMag ? '' : 'none';
+        document.getElementById('chiral-mag-grid').style.display    = hasMag ? '' : 'none';
+        if (hasMag) {
+            setPlain('chiral-mx', M[0]);
+            setPlain('chiral-my', M[1]);
+            setPlain('chiral-mz', M[2]);
+            const mmag = Math.sqrt(M[0]**2 + M[1]**2 + M[2]**2);
+            setPlain('chiral-mmag', mmag);
+        }
+    };
+
+    // ── Demo: populate panel with dummy data so the layout is visible ─────────
+    // Remove this block once the real JS wires up updateChiralPanel().
+    window.addEventListener('DOMContentLoaded', () => {
+        const dummyData = {
+            eigenvalues: [[0, 0, 0, 100, 200, 300]],
+            am_active_paths: { Jz: ['Γ-X', 'X-M'], Jx: ['M-Γ'], Jy: [], PAM: ['Γ-X'] },
+            angular_momentum: [[[0.312, -0.158, 0.000], [0, 0, 0], [0, 0, 0],
+                                 [0.841, 0.022, 0.000], [0, 0, 0], [0, 0, 0]]],
+            pam:             [[[0.0, 1.0, 1.0], [0,0,0], [0,0,0],
+                                [1.0, 2.0, 3.0], [0,0,0], [0,0,0]]],
+            helicity:        [[0.195, 0, 0, 0.762, 0, 0]],
+            cycloidicity:    [[[-0.072, 0.301, 0.000, 0.310], [0,0,0,0], [0,0,0,0],
+                                [0.512, -0.133, 0.000, 0.529], [0,0,0,0], [0,0,0,0]]],
+            magnetic_moment: [[[0.0012, -0.0008, 0.0031], null, null,
+                                [0.0041, 0.0019, -0.0022], null, null]],
+        };
+        // Show panel populated with dummy values for band 0, k-point 0
+        updateChiralPanel(dummyData, 0, 0);
+    });
+    </script>
+
+</body>
+</html>

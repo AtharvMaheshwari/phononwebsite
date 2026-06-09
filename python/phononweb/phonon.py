@@ -12,6 +12,7 @@ from phononweb.units import *
 from phononweb.lattice import *
 from phononweb.jsonencoder import *
 from phononweb.utils import estimate_band_connection, open_file_phononwebsite
+from phononweb.chirality import compute_chiral_properties
 
 
 class Phonon():
@@ -113,7 +114,7 @@ class Phonon():
         str10 = np.dtype(('S10', 2))
         nc_chem_sym[:]    = np.array(["%2s"%a for a in self.chemical_symbols],dtype=str10)
         nc_atypes[:]      = np.array([np.where(self.chemical_symbols == a) for a in self.atom_types])
-        nc_atomic_numbers[:] = self.atomic_numbers
+        nc_atomic_nums[:] = self.atomic_numbers
         nc_qpoints[:]        = np.array(self.qpoints)
         nc_primvecs[:]       = self.cell/bohr_angstroem
         nc_atoms_pos[:]      = self.pos
@@ -121,6 +122,7 @@ class Phonon():
         nc_eiv[:]            = self.eigenvectors
 
         ncfile.close()
+
 
     def get_distances_qpts(self):
 
@@ -215,6 +217,10 @@ class Phonon():
             self.get_highsym_qpts()
 
         red_pos = red_car(self.pos,self.cell)
+        
+        # Compute chiral properties
+        chiral_props = compute_chiral_properties(self)
+        
         #create the datastructure to be put on the json file
         data = {"name":         self.name,             # name of the material on the website
                 "natoms":       self.natoms,           # number of atoms
@@ -230,6 +236,9 @@ class Phonon():
                 "distances":    self.distances,        # list distances between the qpoints 
                 "highsym_qpts": self.highsym_qpts,     # list of high symmetry qpoints
                 "vectors":      self.eigenvectors}     # eigenvectors
+
+        # Add computed properties to the JSON output
+        data.update(chiral_props)
 
         f.write(json.dumps(data,cls=JsonEncoder,indent=1))
         f.close()

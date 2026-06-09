@@ -155,6 +155,57 @@ export class PhononHighcharts {
         this.showModeWeights = !!options.enabled;
         this.getAtomColorHex = typeof options.getAtomColorHex === 'function' ? options.getAtomColorHex : null;
         this.getAtomLabel = typeof options.getAtomLabel === 'function' ? options.getAtomLabel : null;
+        this.heatmapProperty = options.heatmapProperty || "none";
+    }
+
+    getHeatmapValue(phonon, property, k, n) {
+        if (!phonon) return null;
+        let arr = phonon[property];
+
+        if (arr && arr[k] && arr[k][n] !== undefined) {
+            return arr[k][n];
+        }
+        return null;
+    }
+
+    getHeatmapRange(phonon, property) {
+        let min = Infinity, max = -Infinity;
+        if (!phonon || !phonon.eigenvalues) return {min: -1, max: 1};
+        let nbands = phonon.eigenvalues[0].length;
+        for (let k = 0; k < phonon.kpoints.length; k++) {
+            for (let n = 0; n < nbands; n++) {
+                let val = this.getHeatmapValue(phonon, property, k, n);
+                if (val !== null) {
+                    if (val < min) min = val;
+                    if (val > max) max = val;
+                }
+            }
+        }
+        if (min === Infinity) return {min: -1, max: 1};
+        if (min === max) return {min: min - 1, max: max + 1};
+        return {min: min, max: max};
+    }
+
+    valueToColor(value, min, max) {
+        if (value === null || value === undefined || isNaN(value)) return '#aaaaaa';
+        let norm = (max === min) ? 0.5 : (value - min) / (max - min);
+        if (norm < 0) norm = 0;
+        if (norm > 1) norm = 1;
+
+        // blue to white to red
+        let r, g, b;
+        if (norm < 0.5) {
+            let t = norm * 2.0; 
+            r = Math.round(t * 255);
+            g = Math.round(t * 255);
+            b = 255;
+        } else {
+            let t = (norm - 0.5) * 2.0; 
+            r = 255;
+            g = Math.round((1 - t) * 255);
+            b = Math.round((1 - t) * 255);
+        }
+        return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
     }
 
     syncLegendVisibility(reset = false) {
@@ -178,7 +229,8 @@ export class PhononHighcharts {
     }
 
     ensureAtomTypeWeights(phonon) {
-        if (this.showModeWeights && phonon && typeof phonon.ensureAllEigenvectors === 'function') {
+        let drawHeatmap = this.heatmapProperty && this.heatmapProperty !== 'none';
+        if ((this.showModeWeights || drawHeatmap) && phonon && typeof phonon.ensureAllEigenvectors === 'function') {
             phonon.ensureAllEigenvectors();
         }
         if (!phonon || !phonon.vec || !phonon.atom_numbers) {
@@ -448,9 +500,10 @@ export class PhononHighcharts {
         }
 
         let previousShowModeWeights = this.showModeWeights;
+        let previousHeatmapProperty = this.heatmapProperty;
         this.setModeWeightsOptions(options);
 
-        if (previousShowModeWeights !== this.showModeWeights) {
+        if (previousShowModeWeights !== this.showModeWeights || previousHeatmapProperty !== this.heatmapProperty) {
             this.update(this.phonon, options);
             return;
         }
@@ -617,9 +670,19 @@ export class PhononHighcharts {
         let nbands = eival[0].length;
         this.highcharts = [];
         let weightCache = this.ensureAtomTypeWeights(phonon);
-        let baseColor = this.showModeWeights ? '#94a3b8' : '#0066FF';
+        let drawHeatmap = this.heatmapProperty && this.heatmapProperty !== 'none';
+        let baseColor = (this.showModeWeights || drawHeatmap) ? '#94a3b8' : '#0066FF';
         let visibleTypeIndices = this.getVisibleAtomTypeIndices();
         let singleVisibleType = visibleTypeIndices.length === 1 ? visibleTypeIndices[0] : null;
+        
+        if (drawHeatmap) {
+            this.heatmapRange = this.getHeatmapRange(phonon, this.heatmapProperty);
+            if (typeof this.updateColorbar === 'function') {
+                this.updateColorbar(this.heatmapRange.min, this.heatmapRange.max, this.heatmapProperty);
+            }
+        }
+
+        let bucketCache = {};
 
         //go through the eigenvalues and create eival list
         for (let n=0; n<nbands; n++) {
@@ -645,7 +708,7 @@ export class PhononHighcharts {
                     this.highcharts.push({
                         name:  n+"",
                         bandIndex: n,
-                        color: baseColor,
+                        color: drawHeatmap ? 'transparent' : baseColor,
                         lineWidth: this.showModeWeights ? 0.8 : 2,
                         zIndex: 5,
                         showInLegend: false,
@@ -653,7 +716,7 @@ export class PhononHighcharts {
                         data: eig
                     });
 
-                    if (this.showModeWeights) {
+                    if (this.showModeWeights && !drawHeatmap) {
                         for (let k=segmentStart; k<segmentEnd - 1; k++) {
                             if (!visibleTypeIndices.length) {
                                 continue;
@@ -670,28 +733,52 @@ export class PhononHighcharts {
                                 color = '#' + Number(this.getAtomColorHex(this.atomTypeLegend[singleVisibleType].atomNumber)).toString(16).padStart(6, '0');
                             }
 
-                            this.highcharts.push({
-                                name: 'weights',
-                                isWeightSeries: true,
-                                bandIndex: n,
-                                segmentStartK: k,
-                                avgWeights: avgWeights,
-                                color: color,
-                                lineWidth: lineWidth,
-                                zIndex: 3,
-                                enableMouseTracking: false,
-                                showInLegend: false,
-                                states: { inactive: { opacity: 1 } },
-                                marker: { enabled: false },
-                                data: [
-                                    [dists[k], eival[k][n]],
-                                    [dists[k + 1], eival[k + 1][n]]
-                                ]
-                            });
+                            let bucketKey = 'weights_' + color + '_' + lineWidth;
+                            if (!bucketCache[bucketKey]) {
+                                bucketCache[bucketKey] = { color: color, lineWidth: lineWidth, isHeatmapSeries: false, data: [] };
+                            }
+                            bucketCache[bucketKey].data.push([dists[k], eival[k][n]]);
+                            bucketCache[bucketKey].data.push([dists[k + 1], eival[k + 1][n]]);
+                            bucketCache[bucketKey].data.push([dists[k + 1], null]);
+                        }
+                    } else if (drawHeatmap) {
+                        for (let k=segmentStart; k<segmentEnd - 1; k++) {
+                            let val0 = this.getHeatmapValue(phonon, this.heatmapProperty, k, n);
+                            let val1 = this.getHeatmapValue(phonon, this.heatmapProperty, k + 1, n);
+                            let color = '#aaaaaa';
+                            if (val0 !== null && val1 !== null) {
+                                let avgVal = (val0 + val1) / 2;
+                                color = this.valueToColor(avgVal, this.heatmapRange.min, this.heatmapRange.max);
+                            }
+                            
+                            let bucketKey = 'heatmap_' + color;
+                            if (!bucketCache[bucketKey]) {
+                                bucketCache[bucketKey] = { color: color, lineWidth: 4, isHeatmapSeries: true, data: [] };
+                            }
+                            bucketCache[bucketKey].data.push([dists[k], eival[k][n]]);
+                            bucketCache[bucketKey].data.push([dists[k + 1], eival[k + 1][n]]);
+                            bucketCache[bucketKey].data.push([dists[k + 1], null]);
                         }
                     }
                 }
             }
+        }
+
+        for (let key in bucketCache) {
+            let bucket = bucketCache[key];
+            this.highcharts.push({
+                name: bucket.isHeatmapSeries ? 'heatmap' : 'weights',
+                isHeatmapSeries: bucket.isHeatmapSeries,
+                isWeightSeries: !bucket.isHeatmapSeries,
+                color: bucket.color,
+                lineWidth: bucket.lineWidth,
+                zIndex: 3,
+                enableMouseTracking: false,
+                showInLegend: false,
+                states: { inactive: { opacity: 1 } },
+                marker: { enabled: false },
+                data: bucket.data
+            });
         }
 
         if (this.showModeWeights) {

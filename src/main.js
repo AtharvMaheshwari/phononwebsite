@@ -53,6 +53,8 @@ p.setLattice( $('#lattice') );
 p.setRepetitionsInput( $('#nx'), $('#ny'), $('#nz') );
 p.setModeSelectionInput( $('#kindex'), $('#nindex'), $('#modeselect') );
 p.setModeWeightsToggle( $('#mode_weights_plot') );
+p.setHeatmapPropertyDropdown( $('#heatmap_property') );
+p.setHeatmapColorbarDiv( $('#heatmap_colorbar') );
 p.setUpdateButton( $('#update') );
 p.setFileInput( $('#file-input') );
 p.setExportPOSCARButton($('#poscar'));

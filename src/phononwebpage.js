@@ -210,6 +210,65 @@ export class PhononWebpage {
         });
     }
 
+    setHeatmapPropertyDropdown(dom_select) {
+        this.dom_heatmap_select = dom_select;
+        if (!dom_select || !dom_select.length) return;
+        
+        dom_select.on('change', () => {
+            this.heatmapProperty = dom_select.val();
+            this.runWithProgressFeedback(() => {
+                this.refreshDispersionAppearance();
+            });
+        });
+    }
+
+    setHeatmapColorbarDiv(dom_div) {
+        this.dom_heatmap_colorbar = dom_div;
+        if (this.dispersion) {
+            this.dispersion.updateColorbar = this.updateColorbar.bind(this);
+        }
+    }
+
+    updateColorbar(min, max, property) {
+        if (!this.dom_heatmap_colorbar || !this.dom_heatmap_colorbar.length) return;
+        
+        if (!property || property === 'none') {
+            this.dom_heatmap_colorbar.hide();
+            return;
+        }
+        
+        this.dom_heatmap_colorbar.show();
+        this.dom_heatmap_colorbar.empty();
+        
+        let gradient = 'linear-gradient(to right, #0000ff 0%, #ffffff 50%, #ff0000 100%)';
+        
+        let bar = document.createElement('div');
+        bar.style.width = '100%';
+        bar.style.height = '10px';
+        bar.style.background = gradient;
+        bar.style.border = '1px solid #ccc';
+        
+        let labels = document.createElement('div');
+        labels.style.display = 'flex';
+        labels.style.justifyContent = 'space-between';
+        labels.style.fontSize = '12px';
+        labels.style.marginTop = '2px';
+        
+        let minLabel = document.createElement('span');
+        minLabel.innerText = Number(min).toFixed(3);
+        let maxLabel = document.createElement('span');
+        maxLabel.innerText = Number(max).toFixed(3);
+        let midLabel = document.createElement('span');
+        midLabel.innerText = Number((min + max) / 2).toFixed(3);
+        
+        labels.appendChild(minLabel);
+        labels.appendChild(midLabel);
+        labels.appendChild(maxLabel);
+        
+        this.dom_heatmap_colorbar.append(bar);
+        this.dom_heatmap_colorbar.append(labels);
+    }
+
     setFileInput(dom_input) {
         /* Load a custom file button
         */
@@ -682,6 +741,7 @@ export class PhononWebpage {
             getAtomColorHex: (atomNumber) => this.getAtomColorHex(atomNumber),
             getAtomLabel: (atomNumber) => atomic_data.atomic_symbol[atomNumber] || String(atomNumber),
             resetLegendVisibility: false,
+            heatmapProperty: this.heatmapProperty || "none"
         };
     }
 
