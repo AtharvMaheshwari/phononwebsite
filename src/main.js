@@ -68,10 +68,23 @@ p.getUrlVars({json: "data/localdb/graphene/data.json", name:"Graphene [1]"});
 v.setCameraDirectionButton($('#camerax'),'x');
 v.setCameraDirectionButton($('#cameray'),'y');
 v.setCameraDirectionButton($('#cameraz'),'z');
+v.setCameraDirectionButton($('#cameraq'),'q');
+v.setCameraDirectionButton($('#cameraqperp'), 'q-perp');
 
 v.setDisplayCombo($('#displaystyle'));
 v.setCellCheckbox($('#drawcell'));
-v.setShadingCheckbox($('#drawshading'));
+
+$('input[name="appearance_radio"]').change(function() {
+    let val = $('input[name="appearance_radio"]:checked').val();
+    if (val === 'shading') {
+        v.shading = true;
+        v.lines = false;
+    } else if (val === 'color') {
+        v.shading = false;
+        v.lines = false;
+    }
+    v.updatelocal(true);
+});
 v.setWebmButton($('#webmbutton'));
 v.setGifButton($('#gifbutton'));
 v.setArrowsCheckbox($('#drawvectors'));

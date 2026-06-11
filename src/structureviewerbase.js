@@ -26,6 +26,7 @@ export class StructureViewerBase {
     constructor() {
         this.display = 'jmol';
         this.shading = true;
+        this.lines = false;
         this.container = null;
         this.scene = null;
         this.camera = null;
@@ -96,7 +97,7 @@ export class StructureViewerBase {
         this.pointLight.visible = true;
         this.camera.add(this.pointLight);
 
-        this.renderer = new THREE.WebGLRenderer({ antialias: true });
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
         this.renderer.setClearColor(0xffffff);
         if ('outputColorSpace' in this.renderer && 'LinearSRGBColorSpace' in THREE) {
             this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;

@@ -35,25 +35,70 @@ export class PhononHighcharts {
             }
         }
 
+        this.top_labels_formatter = function(phonon) {
+            return function() {
+                // UI Placeholder for Irrep/Symmetry group
+                if ( phonon.highsym_qpts[this.value] ) {
+                    // This is at a high-symmetry point
+                    return `<span style="color:#0066cc; font-size:12px;"><i>Sym</i></span>`;
+                }
+                // Check if it's a midpoint for the line symmetry
+                return `<span style="color:#666666; font-size:11px;"><i>LineSym</i></span>`;
+            }
+        }
+
         this.HighchartsOptions = {
             chart: { type: 'line',
                      zoomType: 'xy' },
             accessibility: { enabled: false },
             title: { text: null },
-            xAxis: { plotLines: [],
-                     lineWidth: 0,
-                     minorGridLineWidth: 0,
-                     lineColor: 'transparent',
-                     minorTickLength: 0,
-                     tickLength: 0,
-                     labels: {
-                        style: { fontSize:'20px' }
-                     }
-                   },
+            xAxis: [
+                {
+                    plotLines: [],
+                    lineWidth: 0,
+                    minorGridLineWidth: 0,
+                    lineColor: 'transparent',
+                    minorTickLength: 0,
+                    tickLength: 0,
+                    labels: {
+                        style: { fontSize:'20px' },
+                        allowOverlap: true
+                    }
+                },
+                {
+                    linkedTo: 0,
+                    opposite: true,
+                    lineWidth: 0,
+                    minorGridLineWidth: 0,
+                    lineColor: 'transparent',
+                    minorTickLength: 0,
+                    tickLength: 0,
+                    labels: {
+                        useHTML: true,
+                        allowOverlap: true,
+                        formatter: this.top_labels_formatter(phonon)
+                    }
+                }
+            ],
             yAxis: { title: { text: 'Frequency (cm<sup>-1</sup>)' },
                      plotLines: [ {value: 0, color: '#000000', width: 2} ]
                    },
-            tooltip: { formatter: function(x) { return Math.round(this.y*100)/100+' cm<sup>-1</sup>' } },
+            tooltip: { 
+                animation: false,
+                formatter: function() { 
+                    let freq = Math.round(this.y*100)/100+' cm<sup>-1</sup>';
+                    if (this.point && typeof this.point.propValue === 'number') {
+                        let propVal = Math.round(this.point.propValue * 1000) / 1000;
+                        let propName = 'Value';
+                        let propSelector = document.getElementById('heatmap_property');
+                        if (propSelector && propSelector.value !== 'none') {
+                            propName = propSelector.options[propSelector.selectedIndex].text;
+                        }
+                        return '<b>' + freq + '</b><br/><span style="color:#475569;font-size:11px;">' + propName + ':</span> ' + propVal;
+                    }
+                    return freq;
+                }
+            },
             legend: {
                 enabled: false,
                 floating: true,
@@ -69,11 +114,19 @@ export class PhononHighcharts {
             series: [],
             plotOptions: { line:   { animation: false },
                            series: { allowPointSelect: true,
-                                     marker: { states: { select: { fillColor: 'red',
-                                                                   radius: 5,
-                                                                   lineWidth: 0 }
-                                                       }
-                                             },
+                                     marker: { states: { 
+                                         select: { enabled: true,
+                                                   fillColor: '#000000',
+                                                   radius: 6,
+                                                   lineWidth: 0 },
+                                         hover:  { enabled: true, radius: 4 }
+                                     } },
+                                     states: {
+                                         hover: {
+                                             halo: false,
+                                             lineWidthPlus: 0
+                                         }
+                                     },
                                      cursor: 'pointer',
                                      point: { events: { } }
                                    }
@@ -182,28 +235,29 @@ export class PhononHighcharts {
             }
         }
         if (min === Infinity) return {min: -1, max: 1};
-        if (min === max) return {min: min - 1, max: max + 1};
-        return {min: min, max: max};
+        
+        // Zero-center the heatmap
+        let maxAbs = Math.max(Math.abs(min), Math.abs(max));
+        if (maxAbs === 0) maxAbs = 1;
+        return {min: -maxAbs, max: maxAbs};
     }
 
     valueToColor(value, min, max) {
-        if (value === null || value === undefined || isNaN(value)) return '#aaaaaa';
+        if (!Number.isFinite(value)) return '#888888';
         let norm = (max === min) ? 0.5 : (value - min) / (max - min);
-        if (norm < 0) norm = 0;
-        if (norm > 1) norm = 1;
-
-        // blue to white to red
+        norm = Math.max(0, Math.min(1, norm));
+        
         let r, g, b;
         if (norm < 0.5) {
             let t = norm * 2.0; 
-            r = Math.round(t * 255);
-            g = Math.round(t * 255);
-            b = 255;
+            r = Math.round(t * 200);
+            g = Math.round(t * 200);
+            b = Math.round(255 - t * 55);
         } else {
             let t = (norm - 0.5) * 2.0; 
-            r = 255;
-            g = Math.round((1 - t) * 255);
-            b = Math.round((1 - t) * 255);
+            r = Math.round(200 + t * 55);
+            g = Math.round((1 - t) * 200);
+            b = Math.round((1 - t) * 200);
         }
         return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
     }
@@ -584,9 +638,18 @@ export class PhononHighcharts {
 
         this.HighchartsOptions.series = this.highcharts;
         this.HighchartsOptions.legend.enabled = this.showModeWeights && this.atomTypeLegend.length > 0;
-        this.HighchartsOptions.xAxis.tickPositions = ticks;
-        this.HighchartsOptions.xAxis.plotLines = plotLines;
-        this.HighchartsOptions.xAxis.labels.formatter = this.labels_formatter(phonon)
+        //calculate midpoints for line symmetry labels
+        let topTicks = [...ticks];
+        for (let i = 0; i < ticks.length - 1; i++) {
+            topTicks.push((ticks[i] + ticks[i+1]) / 2.0);
+        }
+        topTicks.sort((a, b) => a - b);
+
+        this.HighchartsOptions.xAxis[0].tickPositions = ticks;
+        this.HighchartsOptions.xAxis[0].plotLines = plotLines;
+        this.HighchartsOptions.xAxis[0].labels.formatter = this.labels_formatter(phonon);
+        this.HighchartsOptions.xAxis[1].tickPositions = topTicks;
+        this.HighchartsOptions.xAxis[1].labels.formatter = this.top_labels_formatter(phonon);
         this.HighchartsOptions.yAxis.min = minVal;
         if (this.chart) {
             this.chart.destroy();
@@ -695,13 +758,17 @@ export class PhononHighcharts {
                 for (let segmentIndex = 0; segmentIndex < plotSegments.length; segmentIndex++) {
                     let segmentStart = plotSegments[segmentIndex][0];
                     let segmentEnd = plotSegments[segmentIndex][1];
-                    let eig = [];
-
+                    let data = [];
                     for (let k=segmentStart; k<segmentEnd; k++) {
-                        eig.push({
+                        let propVal = null;
+                        if (drawHeatmap) {
+                            propVal = this.getHeatmapValue(phonon, this.heatmapProperty, k, n);
+                        }
+                        data.push({
                             x: dists[k],
                             y: eival[k][n],
                             kIndex: k,
+                            propValue: propVal
                         });
                     }
 
@@ -713,7 +780,7 @@ export class PhononHighcharts {
                         zIndex: 5,
                         showInLegend: false,
                         marker: { radius: 1, symbol: "circle"},
-                        data: eig
+                        data: data
                     });
 
                     if (this.showModeWeights && !drawHeatmap) {

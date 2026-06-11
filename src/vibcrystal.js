@@ -145,11 +145,11 @@ export class VibCrystal extends StructureViewerBase {
         //balls
         this.sphereRadius = 0.5;
         if (this.display == 'vesta') {
-            this.sphereLat = 16;
-            this.sphereLon = 16;
-        } else {
             this.sphereLat = 12;
             this.sphereLon = 12;
+        } else {
+            this.sphereLat = 10;
+            this.sphereLon = 10;
         }
 
         //bonds
@@ -375,13 +375,60 @@ export class VibCrystal extends StructureViewerBase {
         );
     }
 
-    //functions to link the DOM buttons with this class
     setCameraDirectionButton(dom_button,direction) {
     /* Bind the action to set the direction of the camera using direction
-       direction can be 'x','y','z'
+       direction can be 'x','y','z', or 'q'
     */
         let self = this;
         dom_button.click( function() { self.setCameraDirection(direction) } );
+    }
+
+    setCameraDirection(direction) {
+        if (direction === 'q' || direction === 'q-perp') {
+            if (this.phonon && this.phonon.kpoints && this.phonon.kpoints[this.captureK] && this.phonon.lat) {
+                let qRed = this.phonon.kpoints[this.captureK];
+                // Convert reduced q to Cartesian
+                let b = this.phonon.lat; // Reciprocal lattice vectors (rows usually)
+                let qx = qRed[0]*b[0][0] + qRed[1]*b[1][0] + qRed[2]*b[2][0];
+                let qy = qRed[0]*b[0][1] + qRed[1]*b[1][1] + qRed[2]*b[2][1];
+                let qz = qRed[0]*b[0][2] + qRed[1]*b[1][2] + qRed[2]*b[2][2];
+                let norm = Math.sqrt(qx*qx + qy*qy + qz*qz);
+                
+                if (norm > 1e-8 && this.camera) {
+                    let kx = qx/norm, ky = qy/norm, kz = qz/norm;
+                    let qVec = new THREE.Vector3(kx, ky, kz);
+                    
+                    if (direction === 'q') {
+                        this.camera.position.set(kx * this.cameraDistance, ky * this.cameraDistance, kz * this.cameraDistance);
+                        if (Math.abs(kz) > 0.99) {
+                            this.camera.up.set(1, 0, 0);
+                        } else {
+                            this.camera.up.set(0, 0, 1);
+                        }
+                    } else if (direction === 'q-perp') {
+                        let v = new THREE.Vector3();
+                        // Try cross with Z-axis
+                        v.crossVectors(qVec, new THREE.Vector3(0,0,1));
+                        if (v.lengthSq() < 1e-5) {
+                            // If q is parallel to Z, cross with X-axis
+                            v.crossVectors(qVec, new THREE.Vector3(1,0,0));
+                        }
+                        v.normalize();
+                        
+                        this.camera.position.set(v.x * this.cameraDistance, v.y * this.cameraDistance, v.z * this.cameraDistance);
+                        
+                        // Set up vector so that q points to the right
+                        let upVec = new THREE.Vector3();
+                        upVec.crossVectors(qVec, v).normalize();
+                        this.camera.up.copy(upVec);
+                    }
+                    
+                    this.camera.lookAt(new THREE.Vector3(0,0,0));
+                }
+            }
+        } else {
+            super.setCameraDirection(direction);
+        }
     }
 
     setPlayPause(dom_input) {
@@ -409,6 +456,15 @@ export class VibCrystal extends StructureViewerBase {
         this.shading = dom_checkbox.prop('checked');
         dom_checkbox.click( function() {
             self.shading = this.checked;
+            self.updatelocal();
+        } );
+    }
+
+    setLinesCheckbox(dom_checkbox) {
+        let self = this;
+        this.lines = dom_checkbox.prop('checked');
+        dom_checkbox.click( function() {
+            self.lines = this.checked;
             self.updatelocal();
         } );
     }
@@ -1437,12 +1493,99 @@ export class VibCrystal extends StructureViewerBase {
         this.getAtypes(this.phonon.atom_numbers);
         this.addStructure(this.atoms,this.phonon.atom_numbers);
         this.addCell(this.phonon.lat);
+        this.addQVectorArrow();
         this.adjustCovalentRadiiSelect();
         if (notifyAppearanceUpdate && typeof this.onAppearanceUpdated === 'function') {
             this.onAppearanceUpdated();
         }
         this.needsRender = true;
         this.startAnimationLoop();
+    }
+
+
+
+
+
+    addQVectorArrow() {
+        if (!this.hudScene) {
+            this.hudScene = new THREE.Scene();
+            // OrthographicCamera(left, right, top, bottom) gives a HUD of exactly 2x2 units
+            this.hudCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
+            this.hudCamera.position.z = 4;
+            
+            let ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            this.hudScene.add(ambientLight);
+            let dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(0, 10, 10);
+            this.hudScene.add(dirLight);
+
+            let arrowGroup = new THREE.Group();
+            let cylGeo = new THREE.CylinderGeometry(0.04, 0.04, 1.0, 16);
+            let coneGeo = new THREE.ConeGeometry(0.12, 0.2, 16);
+            let mat = new THREE.MeshPhongMaterial({color: 0x00ff00, specular: 0x88ff88, shininess: 60, emissive: 0x004400});
+            
+            let cyl = new THREE.Mesh(cylGeo, mat);
+            cyl.position.y = 0; // Centered at 0, goes from -0.5 to 0.5
+            let cone = new THREE.Mesh(coneGeo, mat);
+            cone.position.y = 0.6; // Centered at 0.6, goes from 0.5 to 0.7
+            
+            arrowGroup.add(cyl);
+            arrowGroup.add(cone);
+            arrowGroup.rotation.x = Math.PI / 2; // Point along Z
+            
+            this.qVectorMesh = new THREE.Group();
+            this.qVectorMesh.add(arrowGroup);
+            this.hudScene.add(this.qVectorMesh);
+        }
+
+        this.qVectorCartesian = null;
+        if (this.phonon && this.phonon.kpoints && this.phonon.kpoints[this.captureK] && this.phonon.lat) {
+            let qRed = this.phonon.kpoints[this.captureK];
+            let b = this.phonon.lat;
+            let qx = qRed[0]*b[0][0] + qRed[1]*b[1][0] + qRed[2]*b[2][0];
+            let qy = qRed[0]*b[0][1] + qRed[1]*b[1][1] + qRed[2]*b[2][1];
+            let qz = qRed[0]*b[0][2] + qRed[1]*b[1][2] + qRed[2]*b[2][2];
+            let dir = new THREE.Vector3(qx, qy, qz);
+            if (dir.length() > 1e-8) {
+                dir.normalize();
+                this.qVectorCartesian = dir;
+                this.qVectorMesh.lookAt(dir);
+                this.qVectorMesh.visible = true;
+            } else {
+                this.qVectorMesh.visible = false;
+            }
+        }
+        
+        if (this.qOverlayCanvas) {
+            if (this.qOverlayCanvas.parentNode) {
+                this.qOverlayCanvas.parentNode.removeChild(this.qOverlayCanvas);
+            }
+            this.qOverlayCanvas = null;
+        }
+    }
+
+    drawHUD() {
+        if (this.hudScene && this.hudCamera && this.qVectorCartesian && this.qVectorMesh.visible) {
+            let width = this.container.width();
+            let height = this.container.height();
+            let size = Math.max(100, Math.min(width, height) * 0.2); // ~20% of display size
+            
+            this.renderer.autoClear = false;
+            this.renderer.setViewport(width - size - 10, height - size - 10, size, size);
+            this.renderer.setScissorTest(true);
+            this.renderer.setScissor(width - size - 10, height - size - 10, size, size);
+            
+            // Position hudCamera at the same relative angle as the main camera
+            let offset = new THREE.Vector3().subVectors(this.camera.position, this.controls.target).normalize().multiplyScalar(10);
+            this.hudCamera.position.copy(offset);
+            this.hudCamera.up.copy(this.camera.up);
+            this.hudCamera.lookAt(new THREE.Vector3(0, 0, 0));
+            this.renderer.render(this.hudScene, this.hudCamera);
+            
+            this.renderer.setScissorTest(false);
+            this.renderer.setViewport(0, 0, width, height);
+            this.renderer.autoClear = true;
+        }
     }
 
     onWindowResize() {
@@ -1621,6 +1764,8 @@ export class VibCrystal extends StructureViewerBase {
         }
 
         this.renderer.render( this.scene, this.camera );
+        this.drawHUD();
+
 
         //if the capturer exists then capture
         if (this.capturer) {

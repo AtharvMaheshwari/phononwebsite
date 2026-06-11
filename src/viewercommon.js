@@ -170,6 +170,13 @@ export const sharedViewerMethods = {
     },
 
     createShadedMaterial(config = {}) {
+        if (this.lines) {
+            return new THREE.MeshBasicMaterial({
+                ...config,
+                wireframe: true,
+                color: 0x000000
+            });
+        }
         if (!this.shading) {
             return new THREE.MeshBasicMaterial(config);
         }

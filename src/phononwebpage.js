@@ -240,7 +240,7 @@ export class PhononWebpage {
         this.dom_heatmap_colorbar.show();
         this.dom_heatmap_colorbar.empty();
         
-        let gradient = 'linear-gradient(to right, #0000ff 0%, #ffffff 50%, #ff0000 100%)';
+        let gradient = 'linear-gradient(to right, #0000ff 0%, #c8c8c8 50%, #ff0000 100%)';
         
         let bar = document.createElement('div');
         bar.style.width = '100%';
@@ -654,6 +654,16 @@ export class PhononWebpage {
         this.dom_n.attr('max', limits.maxN + 1);
         this.dom_n.attr('step', 1);
         this.dom_n.val(this.getEnergyOrderFromBandIndex(this.k, this.n) + 1);
+        
+        // Highlight inputs briefly
+        let highlightStyle = 'box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.4); border-color: #0284c7; transition: all 0.3s;';
+        let normalStyle = 'transition: all 0.5s;';
+        this.dom_k.attr('style', highlightStyle);
+        this.dom_n.attr('style', highlightStyle);
+        setTimeout(() => {
+            if (this.dom_k) this.dom_k.attr('style', normalStyle);
+            if (this.dom_n) this.dom_n.attr('style', normalStyle);
+        }, 600);
     }
 
     selectModeByBandIndex(k, n, syncChart=true) {
