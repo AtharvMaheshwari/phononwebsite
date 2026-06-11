@@ -1,8 +1,9 @@
 html, body {
     font-family: Arial,helvetica,sans-serif;
     margin: 0;
-    height: 99.5%;
-    width: 100%;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
 }
 
 section {
@@ -196,7 +197,22 @@ h3 {
 
 #material-list {
     padding: 0px 5px 0px 5px;
+    flex: 1.5;
+    display: flex;
+    flex-direction: column;
+    min-height: 200px;
+}
+
+#mat {
     flex: 1;
+    overflow-y: auto;
+    min-height: 3em;
+}
+
+#ref {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 3em;
 }
 
 #materials_filter {
@@ -222,15 +238,59 @@ h3 {
 #options-list {
     padding: 0px 5px 0px 5px;
     overflow: auto;
-    flex: 2;
+    flex: 3.5;
 }
 
 #menu {
     height: 100%;
     width: 100%;
-   	position: absolute;
+    position: absolute;
     display: flex;
     flex-direction: column;
+    background-color: #f8fafc;
+    border-right: 1px solid #e2e8f0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    overflow-y: auto;
+}
+
+#menu > div {
+    background: #ffffff;
+    margin: 8px;
+    padding: 12px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    border: 1px solid #e2e8f0;
+}
+
+#menu h3 {
+    margin-top: 0;
+    color: #1e293b;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+#menu button {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 4px 10px;
+    cursor: pointer;
+    color: #334155;
+    transition: all 0.2s;
+    font-size: 13px;
+}
+
+#menu button:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+}
+
+#menu input[type="number"], #menu input[type="text"] {
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    padding: 4px 6px;
+    font-size: 13px;
 }
 
 #vibcrystal {
@@ -246,9 +306,10 @@ h3 {
 }
 
 #highcharts {
-    height: 100%;
+    flex: 1;
     width: 100%;
-    position: absolute;
+    position: relative;
+    min-height: 400px;
 }
 
 #structureviewer {
@@ -284,6 +345,7 @@ h3 {
     flex: 1;
     order: 1;
     position: relative;
+    min-width: 0;
 }
 
 .flex-vibcrystal {
@@ -291,6 +353,7 @@ h3 {
     flex: 2;
     order: 2;
     position: relative;
+    min-width: 0;
 }
 
 .flex-highcharts {
@@ -298,6 +361,9 @@ h3 {
     flex: 2;
     order: 3;
     position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
 }
 
 .structure-layout .flex-menu {

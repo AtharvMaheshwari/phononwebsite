@@ -94704,6 +94704,13 @@ const sharedViewerMethods = {
     },
 
     createShadedMaterial(config = {}) {
+        if (this.lines) {
+            return new MeshBasicMaterial({
+                ...config,
+                wireframe: true,
+                color: 0x000000
+            });
+        }
         if (!this.shading) {
             return new MeshBasicMaterial(config);
         }
@@ -97060,6 +97067,7 @@ class StructureViewerBase {
     constructor() {
         this.display = 'jmol';
         this.shading = true;
+        this.lines = false;
         this.container = null;
         this.scene = null;
         this.camera = null;
@@ -97130,7 +97138,7 @@ class StructureViewerBase {
         this.pointLight.visible = true;
         this.camera.add(this.pointLight);
 
-        this.renderer = new WebGLRenderer({ antialias: true });
+        this.renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
         this.renderer.setClearColor(0xffffff);
         if ('outputColorSpace' in this.renderer && 'LinearSRGBColorSpace' in THREE) {
             this.renderer.outputColorSpace = LinearSRGBColorSpace;
@@ -98102,11 +98110,11 @@ class VibCrystal extends StructureViewerBase {
         //balls
         this.sphereRadius = 0.5;
         if (this.display == 'vesta') {
-            this.sphereLat = 16;
-            this.sphereLon = 16;
-        } else {
             this.sphereLat = 12;
             this.sphereLon = 12;
+        } else {
+            this.sphereLat = 10;
+            this.sphereLon = 10;
         }
 
         //bonds
@@ -98332,13 +98340,60 @@ class VibCrystal extends StructureViewerBase {
         );
     }
 
-    //functions to link the DOM buttons with this class
     setCameraDirectionButton(dom_button,direction) {
     /* Bind the action to set the direction of the camera using direction
-       direction can be 'x','y','z'
+       direction can be 'x','y','z', or 'q'
     */
         let self = this;
         dom_button.click( function() { self.setCameraDirection(direction); } );
+    }
+
+    setCameraDirection(direction) {
+        if (direction === 'q' || direction === 'q-perp') {
+            if (this.phonon && this.phonon.kpoints && this.phonon.kpoints[this.captureK] && this.phonon.lat) {
+                let qRed = this.phonon.kpoints[this.captureK];
+                // Convert reduced q to Cartesian
+                let b = this.phonon.lat; // Reciprocal lattice vectors (rows usually)
+                let qx = qRed[0]*b[0][0] + qRed[1]*b[1][0] + qRed[2]*b[2][0];
+                let qy = qRed[0]*b[0][1] + qRed[1]*b[1][1] + qRed[2]*b[2][1];
+                let qz = qRed[0]*b[0][2] + qRed[1]*b[1][2] + qRed[2]*b[2][2];
+                let norm = Math.sqrt(qx*qx + qy*qy + qz*qz);
+                
+                if (norm > 1e-8 && this.camera) {
+                    let kx = qx/norm, ky = qy/norm, kz = qz/norm;
+                    let qVec = new Vector3(kx, ky, kz);
+                    
+                    if (direction === 'q') {
+                        this.camera.position.set(kx * this.cameraDistance, ky * this.cameraDistance, kz * this.cameraDistance);
+                        if (Math.abs(kz) > 0.99) {
+                            this.camera.up.set(1, 0, 0);
+                        } else {
+                            this.camera.up.set(0, 0, 1);
+                        }
+                    } else if (direction === 'q-perp') {
+                        let v = new Vector3();
+                        // Try cross with Z-axis
+                        v.crossVectors(qVec, new Vector3(0,0,1));
+                        if (v.lengthSq() < 1e-5) {
+                            // If q is parallel to Z, cross with X-axis
+                            v.crossVectors(qVec, new Vector3(1,0,0));
+                        }
+                        v.normalize();
+                        
+                        this.camera.position.set(v.x * this.cameraDistance, v.y * this.cameraDistance, v.z * this.cameraDistance);
+                        
+                        // Set up vector so that q points to the right
+                        let upVec = new Vector3();
+                        upVec.crossVectors(qVec, v).normalize();
+                        this.camera.up.copy(upVec);
+                    }
+                    
+                    this.camera.lookAt(new Vector3(0,0,0));
+                }
+            }
+        } else {
+            super.setCameraDirection(direction);
+        }
     }
 
     setPlayPause(dom_input) {
@@ -98366,6 +98421,15 @@ class VibCrystal extends StructureViewerBase {
         this.shading = dom_checkbox.prop('checked');
         dom_checkbox.click( function() {
             self.shading = this.checked;
+            self.updatelocal();
+        } );
+    }
+
+    setLinesCheckbox(dom_checkbox) {
+        let self = this;
+        this.lines = dom_checkbox.prop('checked');
+        dom_checkbox.click( function() {
+            self.lines = this.checked;
             self.updatelocal();
         } );
     }
@@ -99394,12 +99458,99 @@ class VibCrystal extends StructureViewerBase {
         this.getAtypes(this.phonon.atom_numbers);
         this.addStructure(this.atoms,this.phonon.atom_numbers);
         this.addCell(this.phonon.lat);
+        this.addQVectorArrow();
         this.adjustCovalentRadiiSelect();
         if (notifyAppearanceUpdate && typeof this.onAppearanceUpdated === 'function') {
             this.onAppearanceUpdated();
         }
         this.needsRender = true;
         this.startAnimationLoop();
+    }
+
+
+
+
+
+    addQVectorArrow() {
+        if (!this.hudScene) {
+            this.hudScene = new Scene();
+            // OrthographicCamera(left, right, top, bottom) gives a HUD of exactly 2x2 units
+            this.hudCamera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
+            this.hudCamera.position.z = 4;
+            
+            let ambientLight = new AmbientLight(0xffffff, 0.6);
+            this.hudScene.add(ambientLight);
+            let dirLight = new DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(0, 10, 10);
+            this.hudScene.add(dirLight);
+
+            let arrowGroup = new Group();
+            let cylGeo = new CylinderGeometry(0.04, 0.04, 1.0, 16);
+            let coneGeo = new ConeGeometry(0.12, 0.2, 16);
+            let mat = new MeshPhongMaterial({color: 0x00ff00, specular: 0x88ff88, shininess: 60, emissive: 0x004400});
+            
+            let cyl = new Mesh(cylGeo, mat);
+            cyl.position.y = 0; // Centered at 0, goes from -0.5 to 0.5
+            let cone = new Mesh(coneGeo, mat);
+            cone.position.y = 0.6; // Centered at 0.6, goes from 0.5 to 0.7
+            
+            arrowGroup.add(cyl);
+            arrowGroup.add(cone);
+            arrowGroup.rotation.x = Math.PI / 2; // Point along Z
+            
+            this.qVectorMesh = new Group();
+            this.qVectorMesh.add(arrowGroup);
+            this.hudScene.add(this.qVectorMesh);
+        }
+
+        this.qVectorCartesian = null;
+        if (this.phonon && this.phonon.kpoints && this.phonon.kpoints[this.captureK] && this.phonon.lat) {
+            let qRed = this.phonon.kpoints[this.captureK];
+            let b = this.phonon.lat;
+            let qx = qRed[0]*b[0][0] + qRed[1]*b[1][0] + qRed[2]*b[2][0];
+            let qy = qRed[0]*b[0][1] + qRed[1]*b[1][1] + qRed[2]*b[2][1];
+            let qz = qRed[0]*b[0][2] + qRed[1]*b[1][2] + qRed[2]*b[2][2];
+            let dir = new Vector3(qx, qy, qz);
+            if (dir.length() > 1e-8) {
+                dir.normalize();
+                this.qVectorCartesian = dir;
+                this.qVectorMesh.lookAt(dir);
+                this.qVectorMesh.visible = true;
+            } else {
+                this.qVectorMesh.visible = false;
+            }
+        }
+        
+        if (this.qOverlayCanvas) {
+            if (this.qOverlayCanvas.parentNode) {
+                this.qOverlayCanvas.parentNode.removeChild(this.qOverlayCanvas);
+            }
+            this.qOverlayCanvas = null;
+        }
+    }
+
+    drawHUD() {
+        if (this.hudScene && this.hudCamera && this.qVectorCartesian && this.qVectorMesh.visible) {
+            let width = this.container.width();
+            let height = this.container.height();
+            let size = Math.max(100, Math.min(width, height) * 0.2); // ~20% of display size
+            
+            this.renderer.autoClear = false;
+            this.renderer.setViewport(width - size - 10, height - size - 10, size, size);
+            this.renderer.setScissorTest(true);
+            this.renderer.setScissor(width - size - 10, height - size - 10, size, size);
+            
+            // Position hudCamera at the same relative angle as the main camera
+            let offset = new Vector3().subVectors(this.camera.position, this.controls.target).normalize().multiplyScalar(10);
+            this.hudCamera.position.copy(offset);
+            this.hudCamera.up.copy(this.camera.up);
+            this.hudCamera.lookAt(new Vector3(0, 0, 0));
+            this.renderer.render(this.hudScene, this.hudCamera);
+            
+            this.renderer.setScissorTest(false);
+            this.renderer.setViewport(0, 0, width, height);
+            this.renderer.autoClear = true;
+        }
     }
 
     onWindowResize() {
@@ -99578,6 +99729,8 @@ class VibCrystal extends StructureViewerBase {
         }
 
         this.renderer.render( this.scene, this.camera );
+        this.drawHUD();
+
 
         //if the capturer exists then capture
         if (this.capturer) {
@@ -99626,7 +99779,7 @@ class PhononHighcharts {
         this.selectedBandIndex = null;
         this.selectedX = null;
 
-        this.phonon;
+        let phonon = this.phonon;
 
         this.labels_formatter = function(phonon) {
             return function() {
@@ -99644,25 +99797,70 @@ class PhononHighcharts {
             }
         };
 
+        this.top_labels_formatter = function(phonon) {
+            return function() {
+                // UI Placeholder for Irrep/Symmetry group
+                if ( phonon.highsym_qpts[this.value] ) {
+                    // This is at a high-symmetry point
+                    return `<span style="color:#0066cc; font-size:12px;"><i>Sym</i></span>`;
+                }
+                // Check if it's a midpoint for the line symmetry
+                return `<span style="color:#666666; font-size:11px;"><i>LineSym</i></span>`;
+            }
+        };
+
         this.HighchartsOptions = {
             chart: { type: 'line',
                      zoomType: 'xy' },
             accessibility: { enabled: false },
             title: { text: null },
-            xAxis: { plotLines: [],
-                     lineWidth: 0,
-                     minorGridLineWidth: 0,
-                     lineColor: 'transparent',
-                     minorTickLength: 0,
-                     tickLength: 0,
-                     labels: {
-                        style: { fontSize:'20px' }
-                     }
-                   },
+            xAxis: [
+                {
+                    plotLines: [],
+                    lineWidth: 0,
+                    minorGridLineWidth: 0,
+                    lineColor: 'transparent',
+                    minorTickLength: 0,
+                    tickLength: 0,
+                    labels: {
+                        style: { fontSize:'20px' },
+                        allowOverlap: true
+                    }
+                },
+                {
+                    linkedTo: 0,
+                    opposite: true,
+                    lineWidth: 0,
+                    minorGridLineWidth: 0,
+                    lineColor: 'transparent',
+                    minorTickLength: 0,
+                    tickLength: 0,
+                    labels: {
+                        useHTML: true,
+                        allowOverlap: true,
+                        formatter: this.top_labels_formatter(phonon)
+                    }
+                }
+            ],
             yAxis: { title: { text: 'Frequency (cm<sup>-1</sup>)' },
                      plotLines: [ {value: 0, color: '#000000', width: 2} ]
                    },
-            tooltip: { formatter: function(x) { return Math.round(this.y*100)/100+' cm<sup>-1</sup>' } },
+            tooltip: { 
+                animation: false,
+                formatter: function() { 
+                    let freq = Math.round(this.y*100)/100+' cm<sup>-1</sup>';
+                    if (this.point && typeof this.point.propValue === 'number') {
+                        let propVal = Math.round(this.point.propValue * 1000) / 1000;
+                        let propName = 'Value';
+                        let propSelector = document.getElementById('heatmap_property');
+                        if (propSelector && propSelector.value !== 'none') {
+                            propName = propSelector.options[propSelector.selectedIndex].text;
+                        }
+                        return '<b>' + freq + '</b><br/><span style="color:#475569;font-size:11px;">' + propName + ':</span> ' + propVal;
+                    }
+                    return freq;
+                }
+            },
             legend: {
                 enabled: false,
                 floating: true,
@@ -99678,11 +99876,19 @@ class PhononHighcharts {
             series: [],
             plotOptions: { line:   { animation: false },
                            series: { allowPointSelect: true,
-                                     marker: { states: { select: { fillColor: 'red',
-                                                                   radius: 5,
-                                                                   lineWidth: 0 }
-                                                       }
-                                             },
+                                     marker: { states: { 
+                                         select: { enabled: true,
+                                                   fillColor: '#000000',
+                                                   radius: 6,
+                                                   lineWidth: 0 },
+                                         hover:  { enabled: true, radius: 4 }
+                                     } },
+                                     states: {
+                                         hover: {
+                                             halo: false,
+                                             lineWidthPlus: 0
+                                         }
+                                     },
                                      cursor: 'pointer',
                                      point: { events: { } }
                                    }
@@ -99791,28 +99997,29 @@ class PhononHighcharts {
             }
         }
         if (min === Infinity) return {min: -1, max: 1};
-        if (min === max) return {min: min - 1, max: max + 1};
-        return {min: min, max: max};
+        
+        // Zero-center the heatmap
+        let maxAbs = Math.max(Math.abs(min), Math.abs(max));
+        if (maxAbs === 0) maxAbs = 1;
+        return {min: -maxAbs, max: maxAbs};
     }
 
     valueToColor(value, min, max) {
-        if (value === null || value === undefined || isNaN(value)) return '#aaaaaa';
+        if (!Number.isFinite(value)) return '#888888';
         let norm = (max === min) ? 0.5 : (value - min) / (max - min);
-        if (norm < 0) norm = 0;
-        if (norm > 1) norm = 1;
-
-        // blue to white to red
+        norm = Math.max(0, Math.min(1, norm));
+        
         let r, g, b;
         if (norm < 0.5) {
             let t = norm * 2.0; 
-            r = Math.round(t * 255);
-            g = Math.round(t * 255);
-            b = 255;
+            r = Math.round(t * 200);
+            g = Math.round(t * 200);
+            b = Math.round(255 - t * 55);
         } else {
             let t = (norm - 0.5) * 2.0; 
-            r = 255;
-            g = Math.round((1 - t) * 255);
-            b = Math.round((1 - t) * 255);
+            r = Math.round(200 + t * 55);
+            g = Math.round((1 - t) * 200);
+            b = Math.round((1 - t) * 200);
         }
         return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
     }
@@ -100193,9 +100400,18 @@ class PhononHighcharts {
 
         this.HighchartsOptions.series = this.highcharts;
         this.HighchartsOptions.legend.enabled = this.showModeWeights && this.atomTypeLegend.length > 0;
-        this.HighchartsOptions.xAxis.tickPositions = ticks;
-        this.HighchartsOptions.xAxis.plotLines = plotLines;
-        this.HighchartsOptions.xAxis.labels.formatter = this.labels_formatter(phonon);
+        //calculate midpoints for line symmetry labels
+        let topTicks = [...ticks];
+        for (let i = 0; i < ticks.length - 1; i++) {
+            topTicks.push((ticks[i] + ticks[i+1]) / 2.0);
+        }
+        topTicks.sort((a, b) => a - b);
+
+        this.HighchartsOptions.xAxis[0].tickPositions = ticks;
+        this.HighchartsOptions.xAxis[0].plotLines = plotLines;
+        this.HighchartsOptions.xAxis[0].labels.formatter = this.labels_formatter(phonon);
+        this.HighchartsOptions.xAxis[1].tickPositions = topTicks;
+        this.HighchartsOptions.xAxis[1].labels.formatter = this.top_labels_formatter(phonon);
         this.HighchartsOptions.yAxis.min = minVal;
         if (this.chart) {
             this.chart.destroy();
@@ -100304,13 +100520,17 @@ class PhononHighcharts {
                 for (let segmentIndex = 0; segmentIndex < plotSegments.length; segmentIndex++) {
                     let segmentStart = plotSegments[segmentIndex][0];
                     let segmentEnd = plotSegments[segmentIndex][1];
-                    let eig = [];
-
+                    let data = [];
                     for (let k=segmentStart; k<segmentEnd; k++) {
-                        eig.push({
+                        let propVal = null;
+                        if (drawHeatmap) {
+                            propVal = this.getHeatmapValue(phonon, this.heatmapProperty, k, n);
+                        }
+                        data.push({
                             x: dists[k],
                             y: eival[k][n],
                             kIndex: k,
+                            propValue: propVal
                         });
                     }
 
@@ -100322,7 +100542,7 @@ class PhononHighcharts {
                         zIndex: 5,
                         showInLegend: false,
                         marker: { radius: 1, symbol: "circle"},
-                        data: eig
+                        data: data
                     });
 
                     if (this.showModeWeights && !drawHeatmap) {
@@ -109883,7 +110103,7 @@ class PhononWebpage {
         this.dom_heatmap_colorbar.show();
         this.dom_heatmap_colorbar.empty();
         
-        let gradient = 'linear-gradient(to right, #0000ff 0%, #ffffff 50%, #ff0000 100%)';
+        let gradient = 'linear-gradient(to right, #0000ff 0%, #c8c8c8 50%, #ff0000 100%)';
         
         let bar = document.createElement('div');
         bar.style.width = '100%';
@@ -110295,6 +110515,16 @@ class PhononWebpage {
         this.dom_n.attr('max', limits.maxN + 1);
         this.dom_n.attr('step', 1);
         this.dom_n.val(this.getEnergyOrderFromBandIndex(this.k, this.n) + 1);
+        
+        // Highlight inputs briefly
+        let highlightStyle = 'box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.4); border-color: #0284c7; transition: all 0.3s;';
+        let normalStyle = 'transition: all 0.5s;';
+        this.dom_k.attr('style', highlightStyle);
+        this.dom_n.attr('style', highlightStyle);
+        setTimeout(() => {
+            if (this.dom_k) this.dom_k.attr('style', normalStyle);
+            if (this.dom_n) this.dom_n.attr('style', normalStyle);
+        }, 600);
     }
 
     selectModeByBandIndex(k, n, syncChart=true) {
@@ -110775,10 +111005,23 @@ p.getUrlVars({json: "data/localdb/graphene/data.json", name:"Graphene [1]"});
 v.setCameraDirectionButton($$1('#camerax'),'x');
 v.setCameraDirectionButton($$1('#cameray'),'y');
 v.setCameraDirectionButton($$1('#cameraz'),'z');
+v.setCameraDirectionButton($$1('#cameraq'),'q');
+v.setCameraDirectionButton($$1('#cameraqperp'), 'q-perp');
 
 v.setDisplayCombo($$1('#displaystyle'));
 v.setCellCheckbox($$1('#drawcell'));
-v.setShadingCheckbox($$1('#drawshading'));
+
+$$1('input[name="appearance_radio"]').change(function() {
+    let val = $$1('input[name="appearance_radio"]:checked').val();
+    if (val === 'shading') {
+        v.shading = true;
+        v.lines = false;
+    } else if (val === 'color') {
+        v.shading = false;
+        v.lines = false;
+    }
+    v.updatelocal(true);
+});
 v.setWebmButton($$1('#webmbutton'));
 v.setGifButton($$1('#gifbutton'));
 v.setArrowsCheckbox($$1('#drawvectors'));

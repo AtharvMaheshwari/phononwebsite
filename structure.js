@@ -92352,6 +92352,13 @@ const sharedViewerMethods = {
     },
 
     createShadedMaterial(config = {}) {
+        if (this.lines) {
+            return new MeshBasicMaterial({
+                ...config,
+                wireframe: true,
+                color: 0x000000
+            });
+        }
         if (!this.shading) {
             return new MeshBasicMaterial(config);
         }
@@ -92425,6 +92432,7 @@ class StructureViewerBase {
     constructor() {
         this.display = 'jmol';
         this.shading = true;
+        this.lines = false;
         this.container = null;
         this.scene = null;
         this.camera = null;
@@ -92495,7 +92503,7 @@ class StructureViewerBase {
         this.pointLight.visible = true;
         this.camera.add(this.pointLight);
 
-        this.renderer = new WebGLRenderer({ antialias: true });
+        this.renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
         this.renderer.setClearColor(0xffffff);
         if ('outputColorSpace' in this.renderer && 'LinearSRGBColorSpace' in THREE) {
             this.renderer.outputColorSpace = LinearSRGBColorSpace;
