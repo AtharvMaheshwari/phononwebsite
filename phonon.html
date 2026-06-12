@@ -65,13 +65,13 @@
                         <button id="modeselect" type="button">apply</button>
                     </div>
 
-                    <div style="display: table;">
+                    <!-- <div style="display: table;">
                         <div style="display: table-cell; padding-right: 5px;">
                             <h3>Camera:</h3>
                             <button id="camerax" type="button">x</button>
                             <button id="cameray" type="button">y</button>
                             <button id="cameraz" type="button">z</button>
-                            <button id="cameraq" type="button" style="background:#0284c7; color:white; border:none;">q-vector</button>
+                            <button id="cameraq" type="button" style="background:#0284c7; color:white; border:none;">q-vec</button>
                             <button id="cameraqperp" type="button" style="background:#0284c7; color:white; border:none;">q-perp</button>
                         </div>
                         <div style="display: table-cell; padding-right: 5px;">
@@ -84,7 +84,31 @@
                             <button id="webmbutton" type="button">webm</button>
                             <div id="progress"></div>
                         </div>
+                    </div> -->
+
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <h3>Camera:</h3>
+                        <button id="camerax" type="button">x</button>
+                        <button id="cameray" type="button">y</button>
+                        <button id="cameraz" type="button">z</button>
+                        <br>
+                        <button id="cameraq" type="button" style="background:#0284c7; color:white; border:none;">q-vec</button>
+                        <button id="cameraqperp" type="button" style="background:#0284c7; color:white; border:none;">q-perp</button>
                     </div>
+
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <h3>Cell:</h3>
+                        <input id="drawcell" type="checkbox">on</input>
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <h3>Export movie:</h3>
+                        <button id="gifbutton"  type="button">gif</button>
+                        <button id="webmbutton" type="button">webm</button>
+                        <div id="progress"></div>
+                    </div>
+
+                    <br>
 
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <input id="mode_weights_plot" type="checkbox">mode weights</input>
@@ -95,6 +119,7 @@
                         <input id="drawshading" type="checkbox" checked style="display:none">
                         <input id="drawlines" type="checkbox" style="display:none">
                     </div>
+
 
                     <div>
                         <h3>Amplitude:</h3>
@@ -107,6 +132,47 @@
                         <input id="speed_range" type="range">
                         <button id="playpause" type="button">pause</button>
                     </div>
+
+                    
+                    <div class="appearance-subsection">Vectors</div>
+                        <!-- <div class="appearance-row">
+                            <label for="arrow_color_input">color</label>
+                            <input id="arrow_color_input" type="color">
+                        </div>
+                        <div class="appearance-row">
+                            <label for="drawvectors">visible</label>
+                            <div class="appearance-controls">
+                                <input id="drawvectors" type="checkbox">on</input>
+                            </div>
+                        </div> -->
+
+                        <div class="appearance-container">
+                            <div class="appearance-row">
+                                <label for="arrow_color_input">color</label>
+                                <input id="arrow_color_input" type="color">
+                            </div>
+
+                            <div class="appearance-row">
+                                <label for="drawvectors">visible</label>
+                                <div class="appearance-controls">
+                                    <input id="drawvectors" type="checkbox">
+                                    <label for="drawvectors">on</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="appearance-row">
+                            <label for="arrow_radius_input">radius</label>
+                            <div class="appearance-controls">
+                                <input id="arrow_radius_input" type="number" min="0.01" max="1.0" step="0.01" value="0.1">
+                                <button id="appearance_reset_vectors_button" type="button">reset</button>
+                            </div>
+                        </div>
+
+                        <div class="appearance-row">
+                            <label for="vectors_amplitude_range">size</label>
+                            <input id="vectors_amplitude_range" type="range">
+                        </div>
 
                     <div class="advanced-appearance">
                         <div class="appearance-subsection">Atom</div>
@@ -163,29 +229,6 @@
                                 <button id="bond_add_button" type="button">add</button>
                             </div>
                         </div>
-
-                        <div class="appearance-subsection">Vectors</div>
-                        <div class="appearance-row">
-                            <label for="arrow_color_input">color</label>
-                            <input id="arrow_color_input" type="color">
-                        </div>
-                        <div class="appearance-row">
-                            <label for="drawvectors">visible</label>
-                            <div class="appearance-controls">
-                                <input id="drawvectors" type="checkbox">on</input>
-                            </div>
-                        </div>
-                        <div class="appearance-row">
-                            <label for="vectors_amplitude_range">size</label>
-                            <input id="vectors_amplitude_range" type="range">
-                        </div>
-                        <div class="appearance-row">
-                            <label for="arrow_radius_input">radius</label>
-                            <div class="appearance-controls">
-                                <input id="arrow_radius_input" type="number" min="0.01" max="1.0" step="0.01" value="0.1">
-                                <button id="appearance_reset_vectors_button" type="button">reset</button>
-                            </div>
-                        </div>
                     </div>
 
                     <div>
@@ -226,7 +269,7 @@
                     <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
                         <label for="heatmap_property" style="font-weight: bold; color: #334155; font-size: 13px; margin: 0;">Properties</label>
                         <select id="heatmap_property" style="padding: 6px 30px 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; background-color: #f8fafc; color: #1e293b; font-size: 13px; font-weight: 500; cursor: pointer; outline: none; appearance: none; background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23475569%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E'); background-repeat: no-repeat; background-position: right 10px top 50%; background-size: 10px auto; transition: border-color 0.2s, box-shadow 0.2s;">
-                            <option value="none">Frequency only (None)</option>
+                            <option value="none">Frequency only</option>
                             <option value="cycloidicity_x">Cycloidicity Cx</option>
                             <option value="cycloidicity_y">Cycloidicity Cy</option>
                             <option value="cycloidicity_z">Cycloidicity Cz</option>

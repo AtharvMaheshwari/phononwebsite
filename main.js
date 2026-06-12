@@ -99875,29 +99875,37 @@ class PhononHighcharts {
             },
             series: [],
             plotOptions: { line:   { animation: false },
-                           series: { allowPointSelect: true,
-                                     marker: { states: { 
-                                         select: { enabled: true,
-                                                   fillColor: '#000000',
-                                                   radius: 6,
-                                                   lineWidth: 0 },
-                                         hover:  { enabled: true, radius: 4 }
-                                     } },
-                                     states: {
-                                         hover: {
-                                             halo: false,
-                                             lineWidthPlus: 0
-                                         }
-                                     },
-                                     cursor: 'pointer',
-                                     point: { events: { } }
-                                   }
+                           series: { 
+                                allowPointSelect: true,
+                                stickyTracking: false,      // ADD: prevents hover state bleeding across series
+                                marker: { 
+                                    states: { 
+                                        select: { 
+                                            enabled: true,
+                                            fillColor: '#000000',
+                                            radius: 4,
+                                            lineWidth: 0,
+                                            symbol: 'circle'
+                                        },
+                                        hover: { enabled: true, radius: 4 }
+                                    } 
+                                },
+                                states: {
+                                    hover: {
+                                        halo: false,
+                                        lineWidthPlus: 0
+                                    },
+                                    inactive: { opacity: 1 }   // ADD: prevents non-hovered series from fading
+                                },
+                                cursor: 'pointer',
+                                point: { events: { } }
+                            }
                          }
         };
         this.HighchartsOptions.__phononHighcharts = this;
     }
 
-    setClickEvent( phononweb ) {
+    setClickEvent(phononweb) {
         let click_event = function () {
             if (this.series.options.isLegendSeries || this.series.options.isWeightSeries) { return; }
             let k = Number.isFinite(this.options && this.options.kIndex)
@@ -99910,7 +99918,21 @@ class PhononHighcharts {
             phononweb.selectModeByBandIndex(k, n, true);
             return false;
         };
+
+        // ADD: re-assert selected point appearance on any point hover
+        let mouseOver_event = function() {
+            let phHC = this.series.chart.userOptions.__phononHighcharts;
+            if (!phHC || !phHC.selectedPoint || phHC.selectedPoint === this) { return; }
+            // Defer so Highcharts finishes its own hover state logic first
+            setTimeout(() => {
+                if (phHC.selectedPoint && typeof phHC.selectedPoint.select === 'function') {
+                    try { phHC.selectedPoint.select(true, false); } catch(e) {}
+                }
+            }, 0);
+        };
+
         this.HighchartsOptions.plotOptions.series.point.events.click = click_event;
+        this.HighchartsOptions.plotOptions.series.point.events.mouseOver = mouseOver_event;
     }
 
     selectModePoint(phonon, k, n) {
@@ -99925,44 +99947,61 @@ class PhononHighcharts {
             return;
         }
 
+        // Remove patch from old selected point before deselecting
         if (this.selectedPoint) {
-            this.selectedPoint.select(false, false);
+            if (this.selectedPoint.__origSetState) {
+                this.selectedPoint.setState = this.selectedPoint.__origSetState;
+                delete this.selectedPoint.__origSetState;
+            }
+            try { this.selectedPoint.select(false, false); } catch(e) {}
             this.selectedPoint = null;
         }
 
-        for (let i=0; i<this.chart.series.length; i++) {
+        let bestPoint = null;
+        let bestDist = Infinity;
+
+        for (let i = 0; i < this.chart.series.length; i++) {
             let series = this.chart.series[i];
             if (series.options.isLegendSeries || series.options.isWeightSeries) { continue; }
             if (Number(series.options.bandIndex) !== Number(n)) { continue; }
-            let fallbackPoint = null;
-            for (let j=0; j<series.points.length; j++) {
+
+            for (let j = 0; j < series.points.length; j++) {
                 let point = series.points[j];
                 let pointK = point.options ? point.options.kIndex : undefined;
                 if (Number.isFinite(pointK) && Number(pointK) === Number(k)) {
-                    point.select(true, false);
-                    this.selectedPoint = point;
-                    this.selectedBandIndex = n;
-                    this.selectedK = k;
-                    this.selectedX = targetX;
-                    return;
+                    bestPoint = point;
+                    bestDist = -1;
+                    break;
                 }
-                if (!fallbackPoint && Math.abs(point.x - targetX) < 1e-12) {
-                    fallbackPoint = point;
+                let d = Math.abs(point.x - targetX);
+                if (d < bestDist) {
+                    bestDist = d;
+                    bestPoint = point;
                 }
             }
-            if (fallbackPoint) {
-                fallbackPoint.select(true, false);
-                this.selectedPoint = fallbackPoint;
-                this.selectedBandIndex = n;
-                this.selectedK = k;
-                this.selectedX = targetX;
-                return;
-            }
+            if (bestDist === -1) { break; }
         }
 
-        this.selectedBandIndex = null;
-        this.selectedK = null;
-        this.selectedX = null;
+        if (bestPoint) {
+            bestPoint.select(true, false);
+
+            // Patch setState so Highcharts can never visually reset this point
+            bestPoint.__origSetState = bestPoint.setState;
+            bestPoint.setState = function(state) {
+                // Ignore any attempt to clear or change our select state
+                if (state === '' || state === 'normal' || state === 'inactive') { return; }
+                bestPoint.__origSetState.call(this, state);
+            };
+
+            this.selectedPoint = bestPoint;
+            this.selectedBandIndex = n;
+            this.selectedK = k;
+            this.selectedX = targetX;
+        } else {
+            this.selectedBandIndex = null;
+            this.selectedK = null;
+            this.selectedX = null;
+        }
     }
 
     setModeWeightsOptions(options = {}) {
@@ -100369,6 +100408,17 @@ class PhononHighcharts {
         this.atomTypeLegend = this.getAtomTypeLegend(phonon);
         this.syncLegendVisibility(!!options.resetLegendVisibility);
 
+        if (this.selectedPoint && this.selectedPoint.__origSetState) {
+            this.selectedPoint.setState = this.selectedPoint.__origSetState;
+            delete this.selectedPoint.__origSetState;
+        }
+
+        this.selectedPoint = null;
+        this.selectedBandIndex = null;
+        this.selectedK = null;
+        this.selectedX = null;
+
+    
         //set the minimum of the plot with the smallest phonon frequency
         let minVal = 0;
         for (let i=0; i<phonon.eigenvalues.length; i++) {
@@ -110636,6 +110686,23 @@ class PhononWebpage {
         this.refreshDispersionAppearance();
     }
 
+    // refreshDispersionAppearance() {
+    //     if (!this.phonon || !this.dispersion) {
+    //         return;
+    //     }
+    //     if (typeof this.dispersion.refreshAppearance === 'function') {
+    //         this.dispersion.refreshAppearance(this.getDispersionOptions());
+    //     } else {
+    //         this.dispersion.update(this.phonon, this.getDispersionOptions());
+    //         if (this.dispersion.selectModePoint) {
+    //             this.dispersion.selectModePoint(this.phonon, this.k, this.n);
+    //         }
+    //     }
+    //     if (this.dispersion.reflow) {
+    //         this.dispersion.reflow();
+    //     }
+    // }
+
     refreshDispersionAppearance() {
         if (!this.phonon || !this.dispersion) {
             return;
@@ -110644,9 +110711,10 @@ class PhononWebpage {
             this.dispersion.refreshAppearance(this.getDispersionOptions());
         } else {
             this.dispersion.update(this.phonon, this.getDispersionOptions());
-            if (this.dispersion.selectModePoint) {
-                this.dispersion.selectModePoint(this.phonon, this.k, this.n);
-            }
+        }
+        // ADD THIS — re-select the point after any appearance refresh
+        if (this.dispersion.selectModePoint) {
+            this.dispersion.selectModePoint(this.phonon, this.k, this.n);
         }
         if (this.dispersion.reflow) {
             this.dispersion.reflow();
