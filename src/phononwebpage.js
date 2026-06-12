@@ -775,6 +775,23 @@ export class PhononWebpage {
         this.refreshDispersionAppearance();
     }
 
+    // refreshDispersionAppearance() {
+    //     if (!this.phonon || !this.dispersion) {
+    //         return;
+    //     }
+    //     if (typeof this.dispersion.refreshAppearance === 'function') {
+    //         this.dispersion.refreshAppearance(this.getDispersionOptions());
+    //     } else {
+    //         this.dispersion.update(this.phonon, this.getDispersionOptions());
+    //         if (this.dispersion.selectModePoint) {
+    //             this.dispersion.selectModePoint(this.phonon, this.k, this.n);
+    //         }
+    //     }
+    //     if (this.dispersion.reflow) {
+    //         this.dispersion.reflow();
+    //     }
+    // }
+
     refreshDispersionAppearance() {
         if (!this.phonon || !this.dispersion) {
             return;
@@ -783,9 +800,10 @@ export class PhononWebpage {
             this.dispersion.refreshAppearance(this.getDispersionOptions());
         } else {
             this.dispersion.update(this.phonon, this.getDispersionOptions());
-            if (this.dispersion.selectModePoint) {
-                this.dispersion.selectModePoint(this.phonon, this.k, this.n);
-            }
+        }
+        // ADD THIS — re-select the point after any appearance refresh
+        if (this.dispersion.selectModePoint) {
+            this.dispersion.selectModePoint(this.phonon, this.k, this.n);
         }
         if (this.dispersion.reflow) {
             this.dispersion.reflow();

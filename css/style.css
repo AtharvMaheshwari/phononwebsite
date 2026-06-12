@@ -537,6 +537,24 @@ ap {
     margin-top: 4px;
 }
 
+.appearance-container {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.appearance-row {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.appearance-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
 .structure-toggle-row {
     display: flex;
     gap: 14px;
