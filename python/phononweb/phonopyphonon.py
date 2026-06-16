@@ -13,7 +13,7 @@ import numpy as np
 
 from phonopy import Phonopy
 from phonopy.units import Hartree, Bohr
-from phonopy.interface.phonopy_yaml import *
+from phonopy.interface.phonopy_yaml import PhonopyYaml
 import phonopy.file_IO as file_IO
 
 class PhonopyPhonon():

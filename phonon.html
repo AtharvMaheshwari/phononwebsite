@@ -86,31 +86,31 @@
                         </div>
                     </div> -->
 
-                    <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 4px;">
                         <h3>Camera:</h3>
                         <button id="camerax" type="button">x</button>
                         <button id="cameray" type="button">y</button>
                         <button id="cameraz" type="button">z</button>
-                        <br>
+                        <!-- <br> -->
                         <button id="cameraq" type="button" style="background:#0284c7; color:white; border:none;">q-vec</button>
                         <button id="cameraqperp" type="button" style="background:#0284c7; color:white; border:none;">q-perp</button>
                     </div>
 
-                    <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 4px;">
                         <h3>Cell:</h3>
                         <input id="drawcell" type="checkbox">on</input>
                     </div>
 
-                    <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 4px;">
                         <h3>Export movie:</h3>
                         <button id="gifbutton"  type="button">gif</button>
                         <button id="webmbutton" type="button">webm</button>
                         <div id="progress"></div>
                     </div>
 
-                    <br>
+                    <!-- <br> -->
 
-                    <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 4px;">
                         <input id="mode_weights_plot" type="checkbox">mode weights</input>
                         
                         <label style="margin-left: 10px;"><input type="radio" name="appearance_radio" value="shading" checked> Shaded</label>
@@ -276,14 +276,18 @@
                             <option value="angular_momentum_x">Angular Momentum Jx</option>
                             <option value="angular_momentum_y">Angular Momentum Jy</option>
                             <option value="angular_momentum_z">Angular Momentum Jz</option>
-                            <option value="pam_spin">PAM Spin</option>
-                            <option value="pam_orbital">PAM Orbital</option>
-                            <option value="pam_total">PAM Total</option>
+                            <option value="pam_total_uncompensated">Total PAM (Drifting - Uncompensated)</option>
+                            <option value="pam_total_compensated">Total PAM (Quantized - Compensated)</option>
+                            <option value="pam_rotation_only">Spin PAM (Rotation Only)</option>
                             <option value="helicity">Helicity</option>
                             <option value="magnetic_moment">Magnetic Moment</option>
                         </select>
                     </div>
                     <div id="heatmap_colorbar" style="width: 100%; min-width: 180px; display: none;"></div>
+                    <div id="selected_mode_info" style="display: none; padding: 10px; margin-top: 10px; background: #f1f5f9; border-radius: 6px; font-size: 13px; color: #1e293b; border: 1px solid #cbd5e1; text-align: center;">
+                        <span style="font-weight: bold;">Frequency:</span> <span id="info_frequency" style="font-family: monospace; font-weight: 600; margin-right: 15px;"></span>
+                        <span id="info_property_row" style="display: none;"><span id="info_property_label" style="font-weight: bold;">Property:</span> <span id="info_property_value" style="font-family: monospace; font-weight: 600;"></span></span>
+                    </div>
                 </div>
                 </div>
             </div>

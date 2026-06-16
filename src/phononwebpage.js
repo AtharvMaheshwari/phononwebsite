@@ -1,4 +1,5 @@
 import { LocalDB } from './localdb.js';
+import { LocalDB2 } from './localdb2.js';
 import { ContribDB } from './contribdb.js';
 import { MaterialsProjectDB } from './mpdb.js';
 import { LocalPhononDB } from './localphonondb.js';
@@ -218,6 +219,7 @@ export class PhononWebpage {
             this.heatmapProperty = dom_select.val();
             this.runWithProgressFeedback(() => {
                 this.refreshDispersionAppearance();
+                this.updateSelectedModeInfoUI();
             });
         });
     }
@@ -240,12 +242,9 @@ export class PhononWebpage {
         this.dom_heatmap_colorbar.show();
         this.dom_heatmap_colorbar.empty();
         
-        let gradient = 'linear-gradient(to right, #0000ff 0%, #c8c8c8 50%, #ff0000 100%)';
-        
         let bar = document.createElement('div');
         bar.style.width = '100%';
         bar.style.height = '10px';
-        bar.style.background = gradient;
         bar.style.border = '1px solid #ccc';
         
         let labels = document.createElement('div');
@@ -254,16 +253,64 @@ export class PhononWebpage {
         labels.style.fontSize = '12px';
         labels.style.marginTop = '2px';
         
-        let minLabel = document.createElement('span');
-        minLabel.innerText = Number(min).toFixed(3);
-        let maxLabel = document.createElement('span');
-        maxLabel.innerText = Number(max).toFixed(3);
-        let midLabel = document.createElement('span');
-        midLabel.innerText = Number((min + max) / 2).toFixed(3);
-        
-        labels.appendChild(minLabel);
-        labels.appendChild(midLabel);
-        labels.appendChild(maxLabel);
+        if (property.includes('pam')) {
+            let pamColors = [
+                '#909090', // 0.0: Gray
+                '#cf8748', // 0.5: Soft Orange
+                '#c6ab24', // 1.0: Mustard Yellow
+                '#5aab5a', // 1.5: Soft Green
+                '#3675cf', // 2.0: Soft Blue
+                '#8751b4', // 2.5: Soft Purple
+                '#c63f3f', // 3.0: Soft Red
+                '#876c87', // 3.5: Soft Mauve
+                '#24a2a2', // 4.0: Soft Cyan
+                '#5a87b4', // 4.5: Soft Blue
+                '#b448b4', // 5.0: Soft Magenta
+                '#756cc6', // 5.5: Soft Periwinkle
+                '#24a2a2'  // 6.0: Soft Cyan
+            ];
+            let maxInt = Math.max(0, Math.round(max));
+            if (maxInt === 0) maxInt = 1;
+            
+            let gradientStr = 'linear-gradient(to right';
+            let numSteps = maxInt * 2;
+            for (let i = 0; i <= numSteps; i++) {
+                let pct = (i / numSteps) * 100;
+                let color = pamColors[i % pamColors.length];
+                gradientStr += `, ${color} ${pct}%`;
+            }
+            gradientStr += ')';
+            bar.style.background = gradientStr;
+            
+            for (let i = 0; i <= maxInt; i++) {
+                let lbl = document.createElement('span');
+                lbl.innerText = i;
+                if (i === 0) {
+                    lbl.style.textAlign = 'left';
+                    lbl.style.flex = '0 0 auto';
+                } else if (i === maxInt) {
+                    lbl.style.textAlign = 'right';
+                    lbl.style.flex = '0 0 auto';
+                } else {
+                    lbl.style.textAlign = 'center';
+                    lbl.style.flex = '1';
+                }
+                labels.appendChild(lbl);
+            }
+        } else {
+            bar.style.background = 'linear-gradient(to right, #0000ff 0%, #c8c8c8 50%, #ff0000 100%)';
+            
+            let minLabel = document.createElement('span');
+            minLabel.innerText = Number(min).toFixed(3);
+            let midLabel = document.createElement('span');
+            midLabel.innerText = Number((min + max) / 2).toFixed(3);
+            let maxLabel = document.createElement('span');
+            maxLabel.innerText = Number(max).toFixed(3);
+            
+            labels.appendChild(minLabel);
+            labels.appendChild(midLabel);
+            labels.appendChild(maxLabel);
+        }
         
         this.dom_heatmap_colorbar.append(bar);
         this.dom_heatmap_colorbar.append(labels);
@@ -688,6 +735,43 @@ export class PhononWebpage {
         if (syncChart && this.dispersion && this.dispersion.selectModePoint) {
             this.dispersion.selectModePoint(this.phonon, this.k, this.n);
         }
+        this.updateSelectedModeInfoUI();
+    }
+
+    updateSelectedModeInfoUI() {
+        let infoDiv = document.getElementById('selected_mode_info');
+        let freqEl = document.getElementById('info_frequency');
+        let propRow = document.getElementById('info_property_row');
+        let propLabel = document.getElementById('info_property_label');
+        let propValEl = document.getElementById('info_property_value');
+        
+        if (!infoDiv || !freqEl || !this.phonon || !this.phonon.eigenvalues) { return; }
+        
+        infoDiv.style.display = 'block';
+        
+        let freq = this.phonon.eigenvalues[this.k][this.n];
+        freqEl.innerHTML = Math.round(freq * 100) / 100 + ' cm<sup>-1</sup>';
+        
+        let propSelector = document.getElementById('heatmap_property');
+        let propName = propSelector && propSelector.value !== 'none' ? propSelector.value : 'none';
+        
+        let propVal = null;
+        if (propName !== 'none' && this.dispersion && typeof this.dispersion.getHeatmapValue === 'function') {
+            propVal = this.dispersion.getHeatmapValue(this.phonon, propName, this.k, this.n);
+        }
+        
+        if (propVal !== null) {
+            propRow.style.display = 'inline';
+            propLabel.innerText = propSelector.options[propSelector.selectedIndex].text + ':';
+            
+            if (typeof propVal === 'number') {
+                propValEl.innerText = Math.round(propVal * 1000) / 1000;
+            } else {
+                propValEl.innerText = propVal;
+            }
+        } else {
+            propRow.style.display = 'none';
+        }
     }
 
     selectMode(k, nOrder, syncChart=true) {
@@ -904,6 +988,10 @@ export class PhononWebpage {
         let source = new LocalDB();
         source.get_materials(addMaterials);
 
+        //local database 2 (A. Maheshwari)
+        source = new LocalDB2();
+        source.get_materials(addMaterials);
+
         //contributions database
         source = new ContribDB();
         source.get_materials(addMaterials);
@@ -982,9 +1070,10 @@ export class PhononWebpage {
         let source = material && material.source ? material.source : '';
         let sourcePriorities = {
             localdb: 0,
-            contribdb: 1,
-            phonondb: 2,
-            mpdb: 3,
+            localdb2: 1,
+            contribdb: 2,
+            phonondb: 3,
+            mpdb: 4,
         };
         return Object.prototype.hasOwnProperty.call(sourcePriorities, source)
             ? sourcePriorities[source]

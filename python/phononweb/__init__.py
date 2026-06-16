@@ -6,7 +6,10 @@ PhononWeb: A library for reading phonon dispersion data from first-principles ca
 #
 # This file is part of the phononwebsite project
 #
-from phononweb.qephonon import *
-from phononweb.anaddbphonon import *
-from phononweb.phonopyphonon import *
-from phononweb.vaspphonon import *
+from phononweb.phonon import Phonon
+from phononweb.qephonon import QePhonon
+from phononweb.anaddbphonon import AnaddbPhonon
+from phononweb.phonopyphonon import PhonopyPhonon
+from phononweb.vaspphonon import VaspPhonon
+from phononweb.phonondb import PhononDB
+from phononweb.pw import PwIn

@@ -7,7 +7,7 @@
 import os
 import re
 from math import sqrt
-from phononweb.lattice import *
+from phononweb.lattice import red_car, car_red, rec_lat
 
 class PwIn():
     """

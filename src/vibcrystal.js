@@ -1536,6 +1536,37 @@ export class VibCrystal extends StructureViewerBase {
             this.qVectorMesh = new THREE.Group();
             this.qVectorMesh.add(arrowGroup);
             this.hudScene.add(this.qVectorMesh);
+
+            // Add Cartesian XYZ axes with arrowheads and labels
+            let origin = new THREE.Vector3(0,0,0);
+            let len = 0.6;
+            let col = 0x000000;
+            this.hudScene.add(new THREE.ArrowHelper(new THREE.Vector3(1,0,0), origin, len, col, 0.15, 0.1));
+            this.hudScene.add(new THREE.ArrowHelper(new THREE.Vector3(0,1,0), origin, len, col, 0.15, 0.1));
+            this.hudScene.add(new THREE.ArrowHelper(new THREE.Vector3(0,0,1), origin, len, col, 0.15, 0.1));
+
+            // Create text sprites for X, Y, Z
+            let createLabel = (text, position) => {
+                let canvas = document.createElement('canvas');
+                canvas.width = 64; canvas.height = 64;
+                let ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#000000';
+                ctx.font = 'bold 32px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(text, 32, 32);
+                let texture = new THREE.Texture(canvas);
+                texture.needsUpdate = true;
+                let spriteMaterial = new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true });
+                let sprite = new THREE.Sprite(spriteMaterial);
+                sprite.position.copy(position);
+                sprite.scale.set(0.4, 0.4, 0.4);
+                return sprite;
+            };
+
+            this.hudScene.add(createLabel('X', new THREE.Vector3(0.7, 0, 0)));
+            this.hudScene.add(createLabel('Y', new THREE.Vector3(0, 0.7, 0)));
+            this.hudScene.add(createLabel('Z', new THREE.Vector3(0, 0, 0.7)));
         }
 
         this.qVectorCartesian = null;
@@ -1568,7 +1599,7 @@ export class VibCrystal extends StructureViewerBase {
         if (this.hudScene && this.hudCamera && this.qVectorCartesian && this.qVectorMesh.visible) {
             let width = this.container.width();
             let height = this.container.height();
-            let size = Math.max(100, Math.min(width, height) * 0.2); // ~20% of display size
+            let size = Math.max(100, Math.min(width, height) * 0.2);
             
             this.renderer.autoClear = false;
             this.renderer.setViewport(width - size - 10, height - size - 10, size, size);

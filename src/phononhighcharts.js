@@ -37,13 +37,25 @@ export class PhononHighcharts {
 
         this.top_labels_formatter = function(phonon) {
             return function() {
-                // UI Placeholder for Irrep/Symmetry group
-                if ( phonon.highsym_qpts[this.value] ) {
-                    // This is at a high-symmetry point
-                    return `<span style="color:#0066cc; font-size:12px;"><i>Sym</i></span>`;
+                let dist = this.value;
+                // Check if this tick is at a high-symmetry point
+                if (phonon.highsym_point_group_map && phonon.highsym_point_group_map[dist]) {
+                    let pg = phonon.highsym_point_group_map[dist];
+                    return '<span style="color:#0066cc; font-size:11px; font-weight:600;">' + pg + '</span>';
                 }
-                // Check if it's a midpoint for the line symmetry
-                return `<span style="color:#666666; font-size:11px;"><i>LineSym</i></span>`;
+                // Check if this tick is a segment midpoint
+                if (phonon.segment_point_group_list) {
+                    let tol = 1e-6;
+                    for (let i = 0; i < phonon.segment_point_group_list.length; i++) {
+                        let seg = phonon.segment_point_group_list[i];
+                        let mid = (seg.start + seg.end) / 2.0;
+                        if (Math.abs(dist - mid) < tol) {
+                            let pg = seg.point_group;
+                            return '<span style="color:#888888; font-size:10px; font-style:italic;">' + pg + '</span>';
+                        }
+                    }
+                }
+                return '';
             }
         }
 
@@ -60,6 +72,7 @@ export class PhononHighcharts {
                     lineColor: 'transparent',
                     minorTickLength: 0,
                     tickLength: 0,
+                    crosshair: { width: 1, color: '#999999', dashStyle: 'solid' },
                     labels: {
                         style: { fontSize:'20px' },
                         allowOverlap: true
@@ -81,23 +94,11 @@ export class PhononHighcharts {
                 }
             ],
             yAxis: { title: { text: 'Frequency (cm<sup>-1</sup>)' },
+                     crosshair: { width: 1, color: '#999999', dashStyle: 'solid' },
                      plotLines: [ {value: 0, color: '#000000', width: 2} ]
                    },
             tooltip: { 
-                animation: false,
-                formatter: function() { 
-                    let freq = Math.round(this.y*100)/100+' cm<sup>-1</sup>';
-                    if (this.point && typeof this.point.propValue === 'number') {
-                        let propVal = Math.round(this.point.propValue * 1000) / 1000;
-                        let propName = 'Value';
-                        let propSelector = document.getElementById('heatmap_property');
-                        if (propSelector && propSelector.value !== 'none') {
-                            propName = propSelector.options[propSelector.selectedIndex].text;
-                        }
-                        return '<b>' + freq + '</b><br/><span style="color:#475569;font-size:11px;">' + propName + ':</span> ' + propVal;
-                    }
-                    return freq;
-                }
+                enabled: false
             },
             legend: {
                 enabled: false,
@@ -114,6 +115,8 @@ export class PhononHighcharts {
             series: [],
             plotOptions: { line:   { animation: false },
                            series: { 
+                                findNearestPointBy: 'xy',
+                                turboThreshold: 0,
                                 allowPointSelect: true,
                                 stickyTracking: false,      // ADD: prevents hover state bleeding across series
                                 marker: { 
@@ -153,6 +156,26 @@ export class PhononHighcharts {
             if (!Number.isFinite(n)) {
                 n = Number(this.series.name);
             }
+            
+            // If the user clicks on the already selected point, 
+            // cycle through other bands that overlap at this frequency
+            if (phononweb.k === k && phononweb.n === n) {
+                let freqs = phononweb.phonon.eigenvalues[k];
+                let overlapping_bands = [];
+                for (let b = 0; b < freqs.length; b++) {
+                    // Check if frequency is within 3 cm^-1
+                    if (Math.abs(freqs[b] - this.y) < 3.0) {
+                        overlapping_bands.push(b);
+                    }
+                }
+                if (overlapping_bands.length > 1) {
+                    let idx = overlapping_bands.indexOf(n);
+                    if (idx !== -1) {
+                        n = overlapping_bands[(idx + 1) % overlapping_bands.length];
+                    }
+                }
+            }
+            
             phononweb.selectModeByBandIndex(k, n, true);
             return false;
         };
@@ -179,6 +202,7 @@ export class PhononHighcharts {
         if (!Number.isFinite(targetX)) { return; }
 
         if (this.selectedPoint &&
+            this.selectedPoint.selected &&
             this.selectedBandIndex === n &&
             this.selectedK === k &&
             this.selectedX === targetX) {
@@ -275,14 +299,56 @@ export class PhononHighcharts {
         }
         if (min === Infinity) return {min: -1, max: 1};
         
+        if (property && property.includes('pam')) {
+            if (max === min) max = min + 1;
+            return {min: 0, max: max};
+        }
+        
         // Zero-center the heatmap
         let maxAbs = Math.max(Math.abs(min), Math.abs(max));
         if (maxAbs === 0) maxAbs = 1;
         return {min: -maxAbs, max: maxAbs};
     }
 
-    valueToColor(value, min, max) {
+    valueToColor(value, min, max, propertyName = null) {
         if (!Number.isFinite(value)) return '#888888';
+        
+        if (propertyName && propertyName.includes('pam')) {
+            let pamColors = [
+                [144, 144, 144], // 0.0: Gray
+                [207, 135, 72],  // 0.5: Soft Orange
+                [198, 171, 36],  // 1.0: Mustard Yellow
+                [90, 171, 90],   // 1.5: Soft Green
+                [54, 117, 207],  // 2.0: Soft Blue
+                [135, 81, 180],  // 2.5: Soft Purple
+                [198, 63, 63],   // 3.0: Soft Red
+                [135, 108, 135], // 3.5: Soft Mauve
+                [36, 162, 162],  // 4.0: Soft Cyan
+                [90, 135, 180],  // 4.5: Soft Blue
+                [180, 72, 180],  // 5.0: Soft Magenta
+                [117, 108, 198], // 5.5: Soft Periwinkle
+                [36, 162, 162],  // 6.0: Soft Cyan
+            ];
+            let v = Math.max(0, value);
+            let scaled_v = v * 2.0;
+            let idx1 = Math.floor(scaled_v);
+            let idx2 = idx1 + 1;
+            let frac = scaled_v - idx1;
+            
+            if (idx1 >= pamColors.length - 1) {
+                let c = pamColors[pamColors.length - 1];
+                return '#' + c[0].toString(16).padStart(2, '0') + c[1].toString(16).padStart(2, '0') + c[2].toString(16).padStart(2, '0');
+            }
+            
+            let c1 = pamColors[idx1];
+            let c2 = pamColors[idx2];
+            let r = Math.round(c1[0] + (c2[0] - c1[0]) * frac);
+            let g = Math.round(c1[1] + (c2[1] - c1[1]) * frac);
+            let b = Math.round(c1[2] + (c2[2] - c1[2]) * frac);
+            
+            return '#' + r.toString(16).padStart(2, '0') + g.toString(16).padStart(2, '0') + b.toString(16).padStart(2, '0');
+        }
+
         let norm = (max === min) ? 0.5 : (value - min) / (max - min);
         norm = Math.max(0, Math.min(1, norm));
         
@@ -298,7 +364,7 @@ export class PhononHighcharts {
             g = Math.round((1 - t) * 200);
             b = Math.round((1 - t) * 200);
         }
-        return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+        return '#' + r.toString(16).padStart(2, '0') + g.toString(16).padStart(2, '0') + b.toString(16).padStart(2, '0');
     }
 
     syncLegendVisibility(reset = false) {
@@ -852,11 +918,12 @@ export class PhononHighcharts {
 
                             let bucketKey = 'weights_' + color + '_' + lineWidth;
                             if (!bucketCache[bucketKey]) {
-                                bucketCache[bucketKey] = { color: color, lineWidth: lineWidth, isHeatmapSeries: false, data: [] };
+                                bucketCache[bucketKey] = { color: color, lineWidth: lineWidth, isHeatmapSeries: false, segments: [] };
                             }
-                            bucketCache[bucketKey].data.push([dists[k], eival[k][n]]);
-                            bucketCache[bucketKey].data.push([dists[k + 1], eival[k + 1][n]]);
-                            bucketCache[bucketKey].data.push([dists[k + 1], null]);
+                            bucketCache[bucketKey].segments.push([
+                                [dists[k], eival[k][n]],
+                                [dists[k + 1], eival[k + 1][n]]
+                            ]);
                         }
                     } else if (drawHeatmap) {
                         for (let k=segmentStart; k<segmentEnd - 1; k++) {
@@ -865,16 +932,17 @@ export class PhononHighcharts {
                             let color = '#aaaaaa';
                             if (val0 !== null && val1 !== null) {
                                 let avgVal = (val0 + val1) / 2;
-                                color = this.valueToColor(avgVal, this.heatmapRange.min, this.heatmapRange.max);
+                                color = this.valueToColor(avgVal, this.heatmapRange.min, this.heatmapRange.max, this.heatmapProperty);
                             }
                             
                             let bucketKey = 'heatmap_' + color;
                             if (!bucketCache[bucketKey]) {
-                                bucketCache[bucketKey] = { color: color, lineWidth: 4, isHeatmapSeries: true, data: [] };
+                                bucketCache[bucketKey] = { color: color, lineWidth: 4, isHeatmapSeries: true, segments: [] };
                             }
-                            bucketCache[bucketKey].data.push([dists[k], eival[k][n]]);
-                            bucketCache[bucketKey].data.push([dists[k + 1], eival[k + 1][n]]);
-                            bucketCache[bucketKey].data.push([dists[k + 1], null]);
+                            bucketCache[bucketKey].segments.push([
+                                [dists[k], eival[k][n]],
+                                [dists[k + 1], eival[k + 1][n]]
+                            ]);
                         }
                     }
                 }
@@ -883,6 +951,17 @@ export class PhononHighcharts {
 
         for (let key in bucketCache) {
             let bucket = bucketCache[key];
+            
+            // Highcharts requires data to be sorted by X for binary search zooming to work!
+            bucket.segments.sort((a, b) => a[0][0] - b[0][0]);
+            
+            let data = [];
+            for (let i = 0; i < bucket.segments.length; i++) {
+                data.push(bucket.segments[i][0]);
+                data.push(bucket.segments[i][1]);
+                data.push([bucket.segments[i][1][0], null]);
+            }
+            
             this.highcharts.push({
                 name: bucket.isHeatmapSeries ? 'heatmap' : 'weights',
                 isHeatmapSeries: bucket.isHeatmapSeries,
@@ -894,7 +973,7 @@ export class PhononHighcharts {
                 showInLegend: false,
                 states: { inactive: { opacity: 1 } },
                 marker: { enabled: false },
-                data: bucket.data
+                data: data
             });
         }
 

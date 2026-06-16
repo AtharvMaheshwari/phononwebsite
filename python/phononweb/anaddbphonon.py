@@ -8,7 +8,7 @@ import os
 from math import sqrt
 import numpy as np
 from phononweb.phonon import Phonon
-from phononweb.units import *
+from phononweb.units import ang2bohr, bohr_angstroem, hartree_cm1, eV, Bohr, chemical_symbols, atomic_mass, atomic_numbers
 
 class AnaddbPhonon(Phonon):
     """

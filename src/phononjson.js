@@ -727,9 +727,9 @@ export class PhononJson {
         this.angular_momentum_y = data["angular_momentum_y"] || null;
         this.angular_momentum_z = data["angular_momentum_z"] || null;
         this.helicity = data["helicity"] || null;
-        this.pam_spin = data["pam_spin"] || null;
-        this.pam_orbital = data["pam_orbital"] || null;
-        this.pam_total = data["pam_total"] || null;
+        this.pam_total_uncompensated = data["pam_total_uncompensated"] || null;
+        this.pam_total_compensated = data["pam_total_compensated"] || null;
+        this.pam_rotation_only = data["pam_rotation_only"] || null;
         this.magnetic_moment = data["magnetic_moment"] || null;
         
         if (this.dynamical_matrix && !this.dynamical_matrix.primitive_lattice && this.lat) {
@@ -751,6 +751,29 @@ export class PhononJson {
         for (let i=0; i<data["highsym_qpts"].length; i++) {
             let dist = this.distances[data["highsym_qpts"][i][0]];
             this.highsym_qpts[dist] = data["highsym_qpts"][i][1];
+        }
+
+        //get symmetry point group labels for high-symmetry points and path segments
+        this.highsym_point_group_map = {};
+        if (data["highsym_point_groups"]) {
+            for (let i = 0; i < data["highsym_point_groups"].length; i++) {
+                let entry = data["highsym_point_groups"][i];
+                let dist = this.distances[entry["index"]];
+                this.highsym_point_group_map[dist] = entry["point_group"];
+            }
+        }
+        this.segment_point_group_list = [];
+        if (data["segment_point_groups"]) {
+            for (let i = 0; i < data["segment_point_groups"].length; i++) {
+                let seg = data["segment_point_groups"][i];
+                let startDist = this.distances[seg["start_index"]];
+                let endDist = this.distances[seg["end_index"]];
+                this.segment_point_group_list.push({
+                    start: startDist,
+                    end: endDist,
+                    point_group: seg["point_group"]
+                });
+            }
         }
 
         //get line breaks

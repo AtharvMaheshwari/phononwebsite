@@ -5,8 +5,9 @@
 #
 """ Read phonon dispersion from VASP """
 import numpy as np
-from phononweb import Phonon, bohr_angstroem, atomic_numbers
-from phononweb.lattice import *
+from phononweb.phonon import Phonon
+from phononweb.units import bohr_angstroem, atomic_numbers
+from phononweb.lattice import red_car, car_red, rec_lat
 
 class VaspPhonon(Phonon):
     """

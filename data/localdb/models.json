@@ -18,13 +18,5 @@
     {
         "folder": "data/localdb/mote2_singlelayer",
         "name": "Layer MoTe2"
-    },
-    {
-        "folder": "data/localdb/al4li4o8",
-        "name": "Al4Li4O8 (Mock Properties)"
-    },
-    {
-        "folder": "data/localdb/al4li4o8",
-        "name": "Al4Li4O8 (Mock Properties)"
     }
 ]

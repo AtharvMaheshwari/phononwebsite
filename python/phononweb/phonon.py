@@ -8,12 +8,13 @@ import os
 import json
 import numpy as np
 from collections import Counter
-from phononweb.units import *
-from phononweb.lattice import *
-from phononweb.jsonencoder import *
+from phononweb.units import ang2bohr, bohr_angstroem, hartree_cm1, eV, Bohr, chemical_symbols, atomic_mass, atomic_numbers
+from phononweb.lattice import red_car, car_red, rec_lat
+from phononweb.jsonencoder import JsonEncoder
 from phononweb.utils import estimate_band_connection, open_file_phononwebsite
 from phononweb.chirality import compute_chiral_properties
-
+from phononweb.sym_using_spglib import get_crystal_symmetry, get_symmetry_labels_for_path
+from phononweb.pam import compute_pam_properties
 
 class Phonon():
     """ 
@@ -33,12 +34,24 @@ class Phonon():
 
         eig = np.zeros([self.nqpoints,self.nphons])
         eiv = np.zeros([self.nqpoints,self.nphons,self.nphons],dtype=complex)
-        #set order at gamma
-        order = list(range(self.nphons))
         eig[0] = self.eigenvalues[0]
         eiv[0] = vectors[0]
+        
+        # Build a list of segment start indices
+        segment_starts = [0]
+        if hasattr(self, 'highsym_qpts') and self.highsym_qpts:
+            pass
+        if hasattr(self, 'line_breaks') and self.line_breaks:
+            segment_starts = [b[0] for b in self.line_breaks]
+            
+        order = list(range(self.nphons))
+        
         for k in range(1,self.nqpoints):
-            order = estimate_band_connection(vectors[k-1].T,vectors[k].T,order)
+            if k in segment_starts:
+                order = list(range(self.nphons))
+            else:
+                order = estimate_band_connection(vectors[k-1].T,vectors[k].T,order)
+                
             for n,i in enumerate(order):
                 eig[k,n] = self.eigenvalues[k,i]
                 eiv[k,n] = vectors[k,i]
@@ -239,6 +252,26 @@ class Phonon():
 
         # Add computed properties to the JSON output
         data.update(chiral_props)
+        
+        # Add PAM values
+        try:
+            pam_props = compute_pam_properties(self)
+            data.update(pam_props)
+        except Exception as e:
+            print(f"Warning: could not compute PAM values: {e}")
+
+        # Add symmetry labels for high-symmetry points and path segments
+        try:
+            sym_cell = (np.array(self.cell), np.array(self.pos), np.array(self.atom_numbers))
+            sym_crystal = get_crystal_symmetry(sym_cell)
+            sym_labels = get_symmetry_labels_for_path(
+                sym_cell, self.qpoints, self.highsym_qpts
+            )
+            data["crystal_symmetry"] = sym_crystal
+            data["highsym_point_groups"] = sym_labels["highsym_point_groups"]
+            data["segment_point_groups"] = sym_labels["segment_point_groups"]
+        except Exception as e:
+            print(f"Warning: could not compute symmetry labels: {e}")
 
         f.write(json.dumps(data,cls=JsonEncoder,indent=1))
         f.close()
