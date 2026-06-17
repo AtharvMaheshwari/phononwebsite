@@ -99544,7 +99544,7 @@ class VibCrystal extends StructureViewerBase {
         this.qVectorCartesian = null;
         if (this.phonon && this.phonon.kpoints && this.phonon.kpoints[this.captureK] && this.phonon.lat) {
             let qRed = this.phonon.kpoints[this.captureK];
-            let b = this.phonon.lat;
+            let b = rec_lat(this.phonon.lat);
             let qx = qRed[0]*b[0][0] + qRed[1]*b[1][0] + qRed[2]*b[2][0];
             let qy = qRed[0]*b[0][1] + qRed[1]*b[1][1] + qRed[2]*b[2][1];
             let qz = qRed[0]*b[0][2] + qRed[1]*b[1][2] + qRed[2]*b[2][2];
