@@ -99501,6 +99501,37 @@ class VibCrystal extends StructureViewerBase {
             this.qVectorMesh = new Group();
             this.qVectorMesh.add(arrowGroup);
             this.hudScene.add(this.qVectorMesh);
+
+            // Add Cartesian XYZ axes with arrowheads and labels
+            let origin = new Vector3(0,0,0);
+            let len = 0.6;
+            let col = 0x000000;
+            this.hudScene.add(new ArrowHelper(new Vector3(1,0,0), origin, len, col, 0.15, 0.1));
+            this.hudScene.add(new ArrowHelper(new Vector3(0,1,0), origin, len, col, 0.15, 0.1));
+            this.hudScene.add(new ArrowHelper(new Vector3(0,0,1), origin, len, col, 0.15, 0.1));
+
+            // Create text sprites for X, Y, Z
+            let createLabel = (text, position) => {
+                let canvas = document.createElement('canvas');
+                canvas.width = 64; canvas.height = 64;
+                let ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#000000';
+                ctx.font = 'bold 32px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(text, 32, 32);
+                let texture = new Texture(canvas);
+                texture.needsUpdate = true;
+                let spriteMaterial = new SpriteMaterial({ map: texture, depthTest: false, transparent: true });
+                let sprite = new Sprite(spriteMaterial);
+                sprite.position.copy(position);
+                sprite.scale.set(0.4, 0.4, 0.4);
+                return sprite;
+            };
+
+            this.hudScene.add(createLabel('X', new Vector3(0.7, 0, 0)));
+            this.hudScene.add(createLabel('Y', new Vector3(0, 0.7, 0)));
+            this.hudScene.add(createLabel('Z', new Vector3(0, 0, 0.7)));
         }
 
         this.qVectorCartesian = null;
@@ -99533,7 +99564,7 @@ class VibCrystal extends StructureViewerBase {
         if (this.hudScene && this.hudCamera && this.qVectorCartesian && this.qVectorMesh.visible) {
             let width = this.container.width();
             let height = this.container.height();
-            let size = Math.max(100, Math.min(width, height) * 0.2); // ~20% of display size
+            let size = Math.max(100, Math.min(width, height) * 0.2);
             
             this.renderer.autoClear = false;
             this.renderer.setViewport(width - size - 10, height - size - 10, size, size);
@@ -99799,13 +99830,25 @@ class PhononHighcharts {
 
         this.top_labels_formatter = function(phonon) {
             return function() {
-                // UI Placeholder for Irrep/Symmetry group
-                if ( phonon.highsym_qpts[this.value] ) {
-                    // This is at a high-symmetry point
-                    return `<span style="color:#0066cc; font-size:12px;"><i>Sym</i></span>`;
+                let dist = this.value;
+                // Check if this tick is at a high-symmetry point
+                if (phonon.highsym_point_group_map && phonon.highsym_point_group_map[dist]) {
+                    let pg = phonon.highsym_point_group_map[dist];
+                    return '<span style="color:#0066cc; font-size:11px; font-weight:600;">' + pg + '</span>';
                 }
-                // Check if it's a midpoint for the line symmetry
-                return `<span style="color:#666666; font-size:11px;"><i>LineSym</i></span>`;
+                // Check if this tick is a segment midpoint
+                if (phonon.segment_point_group_list) {
+                    let tol = 1e-6;
+                    for (let i = 0; i < phonon.segment_point_group_list.length; i++) {
+                        let seg = phonon.segment_point_group_list[i];
+                        let mid = (seg.start + seg.end) / 2.0;
+                        if (Math.abs(dist - mid) < tol) {
+                            let pg = seg.point_group;
+                            return '<span style="color:#888888; font-size:10px; font-style:italic;">' + pg + '</span>';
+                        }
+                    }
+                }
+                return '';
             }
         };
 
@@ -99822,6 +99865,7 @@ class PhononHighcharts {
                     lineColor: 'transparent',
                     minorTickLength: 0,
                     tickLength: 0,
+                    crosshair: { width: 1, color: '#999999', dashStyle: 'solid' },
                     labels: {
                         style: { fontSize:'20px' },
                         allowOverlap: true
@@ -99843,23 +99887,11 @@ class PhononHighcharts {
                 }
             ],
             yAxis: { title: { text: 'Frequency (cm<sup>-1</sup>)' },
+                     crosshair: { width: 1, color: '#999999', dashStyle: 'solid' },
                      plotLines: [ {value: 0, color: '#000000', width: 2} ]
                    },
             tooltip: { 
-                animation: false,
-                formatter: function() { 
-                    let freq = Math.round(this.y*100)/100+' cm<sup>-1</sup>';
-                    if (this.point && typeof this.point.propValue === 'number') {
-                        let propVal = Math.round(this.point.propValue * 1000) / 1000;
-                        let propName = 'Value';
-                        let propSelector = document.getElementById('heatmap_property');
-                        if (propSelector && propSelector.value !== 'none') {
-                            propName = propSelector.options[propSelector.selectedIndex].text;
-                        }
-                        return '<b>' + freq + '</b><br/><span style="color:#475569;font-size:11px;">' + propName + ':</span> ' + propVal;
-                    }
-                    return freq;
-                }
+                enabled: false
             },
             legend: {
                 enabled: false,
@@ -99876,6 +99908,8 @@ class PhononHighcharts {
             series: [],
             plotOptions: { line:   { animation: false },
                            series: { 
+                                findNearestPointBy: 'xy',
+                                turboThreshold: 0,
                                 allowPointSelect: true,
                                 stickyTracking: false,      // ADD: prevents hover state bleeding across series
                                 marker: { 
@@ -99915,6 +99949,26 @@ class PhononHighcharts {
             if (!Number.isFinite(n)) {
                 n = Number(this.series.name);
             }
+            
+            // If the user clicks on the already selected point, 
+            // cycle through other bands that overlap at this frequency
+            if (phononweb.k === k && phononweb.n === n) {
+                let freqs = phononweb.phonon.eigenvalues[k];
+                let overlapping_bands = [];
+                for (let b = 0; b < freqs.length; b++) {
+                    // Check if frequency is within 3 cm^-1
+                    if (Math.abs(freqs[b] - this.y) < 3.0) {
+                        overlapping_bands.push(b);
+                    }
+                }
+                if (overlapping_bands.length > 1) {
+                    let idx = overlapping_bands.indexOf(n);
+                    if (idx !== -1) {
+                        n = overlapping_bands[(idx + 1) % overlapping_bands.length];
+                    }
+                }
+            }
+            
             phononweb.selectModeByBandIndex(k, n, true);
             return false;
         };
@@ -99941,6 +99995,7 @@ class PhononHighcharts {
         if (!Number.isFinite(targetX)) { return; }
 
         if (this.selectedPoint &&
+            this.selectedPoint.selected &&
             this.selectedBandIndex === n &&
             this.selectedK === k &&
             this.selectedX === targetX) {
@@ -100037,14 +100092,56 @@ class PhononHighcharts {
         }
         if (min === Infinity) return {min: -1, max: 1};
         
+        if (property && property.includes('pam')) {
+            if (max === min) max = min + 1;
+            return {min: 0, max: max};
+        }
+        
         // Zero-center the heatmap
         let maxAbs = Math.max(Math.abs(min), Math.abs(max));
         if (maxAbs === 0) maxAbs = 1;
         return {min: -maxAbs, max: maxAbs};
     }
 
-    valueToColor(value, min, max) {
+    valueToColor(value, min, max, propertyName = null) {
         if (!Number.isFinite(value)) return '#888888';
+        
+        if (propertyName && propertyName.includes('pam')) {
+            let pamColors = [
+                [144, 144, 144], // 0.0: Gray
+                [207, 135, 72],  // 0.5: Soft Orange
+                [198, 171, 36],  // 1.0: Mustard Yellow
+                [90, 171, 90],   // 1.5: Soft Green
+                [54, 117, 207],  // 2.0: Soft Blue
+                [135, 81, 180],  // 2.5: Soft Purple
+                [198, 63, 63],   // 3.0: Soft Red
+                [135, 108, 135], // 3.5: Soft Mauve
+                [36, 162, 162],  // 4.0: Soft Cyan
+                [90, 135, 180],  // 4.5: Soft Blue
+                [180, 72, 180],  // 5.0: Soft Magenta
+                [117, 108, 198], // 5.5: Soft Periwinkle
+                [36, 162, 162],  // 6.0: Soft Cyan
+            ];
+            let v = Math.max(0, value);
+            let scaled_v = v * 2.0;
+            let idx1 = Math.floor(scaled_v);
+            let idx2 = idx1 + 1;
+            let frac = scaled_v - idx1;
+            
+            if (idx1 >= pamColors.length - 1) {
+                let c = pamColors[pamColors.length - 1];
+                return '#' + c[0].toString(16).padStart(2, '0') + c[1].toString(16).padStart(2, '0') + c[2].toString(16).padStart(2, '0');
+            }
+            
+            let c1 = pamColors[idx1];
+            let c2 = pamColors[idx2];
+            let r = Math.round(c1[0] + (c2[0] - c1[0]) * frac);
+            let g = Math.round(c1[1] + (c2[1] - c1[1]) * frac);
+            let b = Math.round(c1[2] + (c2[2] - c1[2]) * frac);
+            
+            return '#' + r.toString(16).padStart(2, '0') + g.toString(16).padStart(2, '0') + b.toString(16).padStart(2, '0');
+        }
+
         let norm = (max === min) ? 0.5 : (value - min) / (max - min);
         norm = Math.max(0, Math.min(1, norm));
         
@@ -100060,7 +100157,7 @@ class PhononHighcharts {
             g = Math.round((1 - t) * 200);
             b = Math.round((1 - t) * 200);
         }
-        return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+        return '#' + r.toString(16).padStart(2, '0') + g.toString(16).padStart(2, '0') + b.toString(16).padStart(2, '0');
     }
 
     syncLegendVisibility(reset = false) {
@@ -100614,11 +100711,12 @@ class PhononHighcharts {
 
                             let bucketKey = 'weights_' + color + '_' + lineWidth;
                             if (!bucketCache[bucketKey]) {
-                                bucketCache[bucketKey] = { color: color, lineWidth: lineWidth, isHeatmapSeries: false, data: [] };
+                                bucketCache[bucketKey] = { color: color, lineWidth: lineWidth, isHeatmapSeries: false, segments: [] };
                             }
-                            bucketCache[bucketKey].data.push([dists[k], eival[k][n]]);
-                            bucketCache[bucketKey].data.push([dists[k + 1], eival[k + 1][n]]);
-                            bucketCache[bucketKey].data.push([dists[k + 1], null]);
+                            bucketCache[bucketKey].segments.push([
+                                [dists[k], eival[k][n]],
+                                [dists[k + 1], eival[k + 1][n]]
+                            ]);
                         }
                     } else if (drawHeatmap) {
                         for (let k=segmentStart; k<segmentEnd - 1; k++) {
@@ -100627,16 +100725,17 @@ class PhononHighcharts {
                             let color = '#aaaaaa';
                             if (val0 !== null && val1 !== null) {
                                 let avgVal = (val0 + val1) / 2;
-                                color = this.valueToColor(avgVal, this.heatmapRange.min, this.heatmapRange.max);
+                                color = this.valueToColor(avgVal, this.heatmapRange.min, this.heatmapRange.max, this.heatmapProperty);
                             }
                             
                             let bucketKey = 'heatmap_' + color;
                             if (!bucketCache[bucketKey]) {
-                                bucketCache[bucketKey] = { color: color, lineWidth: 4, isHeatmapSeries: true, data: [] };
+                                bucketCache[bucketKey] = { color: color, lineWidth: 4, isHeatmapSeries: true, segments: [] };
                             }
-                            bucketCache[bucketKey].data.push([dists[k], eival[k][n]]);
-                            bucketCache[bucketKey].data.push([dists[k + 1], eival[k + 1][n]]);
-                            bucketCache[bucketKey].data.push([dists[k + 1], null]);
+                            bucketCache[bucketKey].segments.push([
+                                [dists[k], eival[k][n]],
+                                [dists[k + 1], eival[k + 1][n]]
+                            ]);
                         }
                     }
                 }
@@ -100645,6 +100744,17 @@ class PhononHighcharts {
 
         for (let key in bucketCache) {
             let bucket = bucketCache[key];
+            
+            // Highcharts requires data to be sorted by X for binary search zooming to work!
+            bucket.segments.sort((a, b) => a[0][0] - b[0][0]);
+            
+            let data = [];
+            for (let i = 0; i < bucket.segments.length; i++) {
+                data.push(bucket.segments[i][0]);
+                data.push(bucket.segments[i][1]);
+                data.push([bucket.segments[i][1][0], null]);
+            }
+            
             this.highcharts.push({
                 name: bucket.isHeatmapSeries ? 'heatmap' : 'weights',
                 isHeatmapSeries: bucket.isHeatmapSeries,
@@ -100656,7 +100766,7 @@ class PhononHighcharts {
                 showInLegend: false,
                 states: { inactive: { opacity: 1 } },
                 marker: { enabled: false },
-                data: bucket.data
+                data: data
             });
         }
 
@@ -100727,6 +100837,51 @@ class LocalDB {
         }
 
         $.get('data/localdb/models.json', dothings);
+    }
+
+}
+
+class LocalDB2 {
+    /*
+    Interact with the local database of phonons
+    Author: Atharv Maheshwari
+    */
+
+    constructor() {
+        this.name = "localdb2";
+        this.year = 2026;
+        this.author = "A. Maheshwari";
+        this.url = "https://homepages.iitb.ac.in/~atharvmaheshwari/";
+    }
+
+    isAvailable() {
+        return false;
+    }
+
+    get_materials(callback) {
+        /*
+        this function load the materials from a certain source and returns then to the callback
+        Some pre-processing of the data might be required and can be implemented here
+        */
+        let reference = this.author + ", " + "<a href=" + this.url + ">" + this.name + "</a> (" + this.year + ")";
+        let name = this.name;
+
+        function dothings(materials) {
+
+            for (let i=0; i<materials.length; i++) {
+                let m = materials[i];
+                m.source = name;
+                m.type = "json";
+                m.reference = reference;
+
+                //create the url
+                let folder = m.folder;
+                m.url = folder+"/data.json";
+            }
+            callback(materials);
+        }
+
+        $.get('data/localdb2/models.json', dothings);
     }
 
 }
@@ -109064,9 +109219,9 @@ class PhononJson {
         this.angular_momentum_y = data["angular_momentum_y"] || null;
         this.angular_momentum_z = data["angular_momentum_z"] || null;
         this.helicity = data["helicity"] || null;
-        this.pam_spin = data["pam_spin"] || null;
-        this.pam_orbital = data["pam_orbital"] || null;
-        this.pam_total = data["pam_total"] || null;
+        this.pam_total_uncompensated = data["pam_total_uncompensated"] || null;
+        this.pam_total_compensated = data["pam_total_compensated"] || null;
+        this.pam_rotation_only = data["pam_rotation_only"] || null;
         this.magnetic_moment = data["magnetic_moment"] || null;
         
         if (this.dynamical_matrix && !this.dynamical_matrix.primitive_lattice && this.lat) {
@@ -109088,6 +109243,29 @@ class PhononJson {
         for (let i=0; i<data["highsym_qpts"].length; i++) {
             let dist = this.distances[data["highsym_qpts"][i][0]];
             this.highsym_qpts[dist] = data["highsym_qpts"][i][1];
+        }
+
+        //get symmetry point group labels for high-symmetry points and path segments
+        this.highsym_point_group_map = {};
+        if (data["highsym_point_groups"]) {
+            for (let i = 0; i < data["highsym_point_groups"].length; i++) {
+                let entry = data["highsym_point_groups"][i];
+                let dist = this.distances[entry["index"]];
+                this.highsym_point_group_map[dist] = entry["point_group"];
+            }
+        }
+        this.segment_point_group_list = [];
+        if (data["segment_point_groups"]) {
+            for (let i = 0; i < data["segment_point_groups"].length; i++) {
+                let seg = data["segment_point_groups"][i];
+                let startDist = this.distances[seg["start_index"]];
+                let endDist = this.distances[seg["end_index"]];
+                this.segment_point_group_list.push({
+                    start: startDist,
+                    end: endDist,
+                    point_group: seg["point_group"]
+                });
+            }
         }
 
         //get line breaks
@@ -110131,6 +110309,7 @@ class PhononWebpage {
             this.heatmapProperty = dom_select.val();
             this.runWithProgressFeedback(() => {
                 this.refreshDispersionAppearance();
+                this.updateSelectedModeInfoUI();
             });
         });
     }
@@ -110153,12 +110332,9 @@ class PhononWebpage {
         this.dom_heatmap_colorbar.show();
         this.dom_heatmap_colorbar.empty();
         
-        let gradient = 'linear-gradient(to right, #0000ff 0%, #c8c8c8 50%, #ff0000 100%)';
-        
         let bar = document.createElement('div');
         bar.style.width = '100%';
         bar.style.height = '10px';
-        bar.style.background = gradient;
         bar.style.border = '1px solid #ccc';
         
         let labels = document.createElement('div');
@@ -110167,16 +110343,64 @@ class PhononWebpage {
         labels.style.fontSize = '12px';
         labels.style.marginTop = '2px';
         
-        let minLabel = document.createElement('span');
-        minLabel.innerText = Number(min).toFixed(3);
-        let maxLabel = document.createElement('span');
-        maxLabel.innerText = Number(max).toFixed(3);
-        let midLabel = document.createElement('span');
-        midLabel.innerText = Number((min + max) / 2).toFixed(3);
-        
-        labels.appendChild(minLabel);
-        labels.appendChild(midLabel);
-        labels.appendChild(maxLabel);
+        if (property.includes('pam')) {
+            let pamColors = [
+                '#909090', // 0.0: Gray
+                '#cf8748', // 0.5: Soft Orange
+                '#c6ab24', // 1.0: Mustard Yellow
+                '#5aab5a', // 1.5: Soft Green
+                '#3675cf', // 2.0: Soft Blue
+                '#8751b4', // 2.5: Soft Purple
+                '#c63f3f', // 3.0: Soft Red
+                '#876c87', // 3.5: Soft Mauve
+                '#24a2a2', // 4.0: Soft Cyan
+                '#5a87b4', // 4.5: Soft Blue
+                '#b448b4', // 5.0: Soft Magenta
+                '#756cc6', // 5.5: Soft Periwinkle
+                '#24a2a2'  // 6.0: Soft Cyan
+            ];
+            let maxInt = Math.max(0, Math.round(max));
+            if (maxInt === 0) maxInt = 1;
+            
+            let gradientStr = 'linear-gradient(to right';
+            let numSteps = maxInt * 2;
+            for (let i = 0; i <= numSteps; i++) {
+                let pct = (i / numSteps) * 100;
+                let color = pamColors[i % pamColors.length];
+                gradientStr += `, ${color} ${pct}%`;
+            }
+            gradientStr += ')';
+            bar.style.background = gradientStr;
+            
+            for (let i = 0; i <= maxInt; i++) {
+                let lbl = document.createElement('span');
+                lbl.innerText = i;
+                if (i === 0) {
+                    lbl.style.textAlign = 'left';
+                    lbl.style.flex = '0 0 auto';
+                } else if (i === maxInt) {
+                    lbl.style.textAlign = 'right';
+                    lbl.style.flex = '0 0 auto';
+                } else {
+                    lbl.style.textAlign = 'center';
+                    lbl.style.flex = '1';
+                }
+                labels.appendChild(lbl);
+            }
+        } else {
+            bar.style.background = 'linear-gradient(to right, #0000ff 0%, #c8c8c8 50%, #ff0000 100%)';
+            
+            let minLabel = document.createElement('span');
+            minLabel.innerText = Number(min).toFixed(3);
+            let midLabel = document.createElement('span');
+            midLabel.innerText = Number((min + max) / 2).toFixed(3);
+            let maxLabel = document.createElement('span');
+            maxLabel.innerText = Number(max).toFixed(3);
+            
+            labels.appendChild(minLabel);
+            labels.appendChild(midLabel);
+            labels.appendChild(maxLabel);
+        }
         
         this.dom_heatmap_colorbar.append(bar);
         this.dom_heatmap_colorbar.append(labels);
@@ -110599,6 +110823,43 @@ class PhononWebpage {
         if (syncChart && this.dispersion && this.dispersion.selectModePoint) {
             this.dispersion.selectModePoint(this.phonon, this.k, this.n);
         }
+        this.updateSelectedModeInfoUI();
+    }
+
+    updateSelectedModeInfoUI() {
+        let infoDiv = document.getElementById('selected_mode_info');
+        let freqEl = document.getElementById('info_frequency');
+        let propRow = document.getElementById('info_property_row');
+        let propLabel = document.getElementById('info_property_label');
+        let propValEl = document.getElementById('info_property_value');
+        
+        if (!infoDiv || !freqEl || !this.phonon || !this.phonon.eigenvalues) { return; }
+        
+        infoDiv.style.display = 'block';
+        
+        let freq = this.phonon.eigenvalues[this.k][this.n];
+        freqEl.innerHTML = Math.round(freq * 100) / 100 + ' cm<sup>-1</sup>';
+        
+        let propSelector = document.getElementById('heatmap_property');
+        let propName = propSelector && propSelector.value !== 'none' ? propSelector.value : 'none';
+        
+        let propVal = null;
+        if (propName !== 'none' && this.dispersion && typeof this.dispersion.getHeatmapValue === 'function') {
+            propVal = this.dispersion.getHeatmapValue(this.phonon, propName, this.k, this.n);
+        }
+        
+        if (propVal !== null) {
+            propRow.style.display = 'inline';
+            propLabel.innerText = propSelector.options[propSelector.selectedIndex].text + ':';
+            
+            if (typeof propVal === 'number') {
+                propValEl.innerText = Math.round(propVal * 1000) / 1000;
+            } else {
+                propValEl.innerText = propVal;
+            }
+        } else {
+            propRow.style.display = 'none';
+        }
     }
 
     selectMode(k, nOrder, syncChart=true) {
@@ -110815,6 +111076,10 @@ class PhononWebpage {
         let source = new LocalDB();
         source.get_materials(addMaterials);
 
+        //local database 2 (A. Maheshwari)
+        source = new LocalDB2();
+        source.get_materials(addMaterials);
+
         //contributions database
         source = new ContribDB();
         source.get_materials(addMaterials);
@@ -110893,9 +111158,10 @@ class PhononWebpage {
         let source = material && material.source ? material.source : '';
         let sourcePriorities = {
             localdb: 0,
-            contribdb: 1,
-            phonondb: 2,
-            mpdb: 3,
+            localdb2: 1,
+            contribdb: 2,
+            phonondb: 3,
+            mpdb: 4,
         };
         return Object.prototype.hasOwnProperty.call(sourcePriorities, source)
             ? sourcePriorities[source]
