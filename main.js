@@ -99436,6 +99436,13 @@ class VibCrystal extends StructureViewerBase {
         ]);
         if (this.autoBondRulesSourcePhonon !== this.phonon || !Object.keys(this.bondRules).length) {
             this.initializeBondRulesFromAtoms(this.atoms, this.phonon.atom_numbers);
+            if (this.phonon && this.phonon.bond_rules) {
+                for (let i = 0; i < this.phonon.bond_rules.length; i++) {
+                    let r = this.phonon.bond_rules[i];
+                    let key = this.getBondRuleKey(r.atomA, r.atomB);
+                    this.bondRules[key] = { cutoff: r.cutoff };
+                }
+            }
             this.autoBondRulesSourcePhonon = this.phonon;
         }
 
@@ -100884,6 +100891,37 @@ class LocalDB2 {
         $.get('data/localdb2/models.json', dothings);
     }
 
+}
+
+class LocalEventDB {
+    constructor() {
+        this.name = "Model Materials";
+        this.year = 2026;
+        this.author = "L. Wirtz";
+        this.url = "#";
+    }
+
+    isAvailable() {
+        return false;
+    }
+
+    get_materials(callback) {
+        let reference = this.author+", "+"<a href='"+this.url+"'>"+this.name+"</a> ("+this.year+")";
+        let name = this.name;
+
+        function dothings(materials) {
+            for (let i=0; i<materials.length; i++) {
+                let m = materials[i];
+                m.source = name;
+                m.type = "json";
+                m.reference = reference;
+                m.url = "data/jsonfiles_event_LudgerWirtz/" + m.file;
+            }
+            callback(materials);
+        }
+
+        $.get('data/jsonfiles_event_LudgerWirtz/models.json', dothings);
+    }
 }
 
 class ContribDB {
@@ -109221,6 +109259,7 @@ class PhononJson {
         this.helicity = data["helicity"] || null;
         this.pam_total_uncompensated = data["pam_total_uncompensated"] || null;
         this.pam_total_compensated = data["pam_total_compensated"] || null;
+        this.bond_rules = data["bond_rules"] || null;
         this.pam_rotation_only = data["pam_rotation_only"] || null;
         this.magnetic_moment = data["magnetic_moment"] || null;
         
@@ -111076,8 +111115,10 @@ class PhononWebpage {
         let source = new LocalDB();
         source.get_materials(addMaterials);
 
-        //local database 2 (A. Maheshwari)
         source = new LocalDB2();
+        source.get_materials(addMaterials);
+
+        source = new LocalEventDB();
         source.get_materials(addMaterials);
 
         //contributions database
@@ -111157,6 +111198,7 @@ class PhononWebpage {
     getMaterialSourcePriority(material) {
         let source = material && material.source ? material.source : '';
         let sourcePriorities = {
+            'Model Materials': -1,
             localdb: 0,
             localdb2: 1,
             contribdb: 2,
