@@ -729,6 +729,7 @@ export class PhononJson {
         this.helicity = data["helicity"] || null;
         this.pam_total_uncompensated = data["pam_total_uncompensated"] || null;
         this.pam_total_compensated = data["pam_total_compensated"] || null;
+        this.bond_rules = data["bond_rules"] || null;
         this.pam_rotation_only = data["pam_rotation_only"] || null;
         this.magnetic_moment = data["magnetic_moment"] || null;
         

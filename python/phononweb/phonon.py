@@ -27,13 +27,14 @@ class Phonon():
         to re-order the eigenvalues and solve the band-crossings
         """
         #vector transformations
-        dim = (self.nqpoints, self.nphons, self.nphons)
+        ndof = self.natoms * 3
+        dim = (self.nqpoints, self.nphons, ndof)
         vectors = self.eigenvectors.reshape(sum((dim, (2,)), ()))
         vectors = vectors[:,:,:,0] + 1j*vectors[:,:,:,1]
         vectors = vectors.reshape(dim)
 
         eig = np.zeros([self.nqpoints,self.nphons])
-        eiv = np.zeros([self.nqpoints,self.nphons,self.nphons],dtype=complex)
+        eiv = np.zeros([self.nqpoints,self.nphons,ndof],dtype=complex)
         eig[0] = self.eigenvalues[0]
         eiv[0] = vectors[0]
         

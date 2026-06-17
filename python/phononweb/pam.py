@@ -247,18 +247,47 @@ def compute_pam_properties(phonon_obj):
                     # Diagonalize M_D to find symmetry adapted modes
                     eigvals_D, eigvecs_D = np.linalg.eig(M_D)
                     
-                    # Store adapted eigenvectors and their phases
-                    for m_idx, j in enumerate(manifold):
-                        # The adapted mode is a linear combination of the degenerate basis vectors
+                    # Compute adapted modes
+                    adapted_modes = []
+                    for m_idx in range(m_size):
                         V = eigvecs_D[:, m_idx]
-                        adapted_mode = np.zeros(3*natoms, dtype=complex)
+                        mode = np.zeros(3*natoms, dtype=complex)
                         for a in range(m_size):
-                            adapted_mode += V[a] * basis[a]
-                            
-                        # Normalize
-                        norm = np.linalg.norm(adapted_mode)
+                            mode += V[a] * basis[a]
+                        norm = np.linalg.norm(mode)
                         if norm > 1e-12:
-                            adapted_mode /= norm
+                            mode /= norm
+                        adapted_modes.append(mode)
+
+                    # Match with previous q-point to preserve band tracking
+                    ref_modes = eigs_adapted[iq - 1, manifold] if iq > start_idx else basis
+                    
+                    # Compute overlap matrix: overlap[a, b] = |<adapted_modes[a] | ref_modes[b]>|
+                    overlap = np.zeros((m_size, m_size))
+                    for a in range(m_size):
+                        for b in range(m_size):
+                            overlap[a, b] = np.abs(np.vdot(adapted_modes[a], ref_modes[b]))
+                            
+                    # Greedy maximum weight matching
+                    matched_m = set()
+                    matched_b = set()
+                    best_match = {}
+                    pairs = []
+                    for a in range(m_size):
+                        for b in range(m_size):
+                            pairs.append((overlap[a, b], a, b))
+                    pairs.sort(reverse=True, key=lambda x: x[0])
+                    
+                    for val, a, b in pairs:
+                        if a not in matched_m and b not in matched_b:
+                            best_match[b] = a
+                            matched_m.add(a)
+                            matched_b.add(b)
+
+                    # Store adapted eigenvectors and their phases
+                    for b_idx, j in enumerate(manifold):
+                        m_idx = best_match[b_idx]
+                        adapted_mode = adapted_modes[m_idx]
                             
                         # Original logic (uncompensated D matrix)
                         # phase = np.angle(eigvals_D[m_idx])

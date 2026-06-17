@@ -1,0 +1,46 @@
+[
+    {
+        "file": "triangular_molecule.json",
+        "name": "triangular_molecule"
+    },
+    {
+        "file": "square_3d.json",
+        "name": "Square Lattice (in 3 D)"
+    },
+    {
+        "file": "monochain_1d.json",
+        "name": "Monatomic linear chain (in 1 D)"
+    },
+    {
+        "file": "monochain_2d.json",
+        "name": "Monatomic linear chain (in 2 D)"
+    },
+    {
+        "file": "trigonal.json",
+        "name": "Trigonal"
+    },
+    {
+        "file": "square_molecule.json",
+        "name": "square_molecule"
+    },
+    {
+        "file": "square_2atom.json",
+        "name": "Square lattice with two different atoms"
+    },
+    {
+        "file": "square_2d.json",
+        "name": "Square Lattice (in 2 D)"
+    },
+    {
+        "file": "simple_cubic.json",
+        "name": "Simple cubic lattice"
+    },
+    {
+        "file": "diatomicchain_3d.json",
+        "name": "Diatomic linear chain (in 3 D)"
+    },
+    {
+        "file": "hexagonal.json",
+        "name": "Hexagonal"
+    }
+]

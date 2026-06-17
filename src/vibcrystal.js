@@ -1471,6 +1471,13 @@ export class VibCrystal extends StructureViewerBase {
         ]);
         if (this.autoBondRulesSourcePhonon !== this.phonon || !Object.keys(this.bondRules).length) {
             this.initializeBondRulesFromAtoms(this.atoms, this.phonon.atom_numbers);
+            if (this.phonon && this.phonon.bond_rules) {
+                for (let i = 0; i < this.phonon.bond_rules.length; i++) {
+                    let r = this.phonon.bond_rules[i];
+                    let key = this.getBondRuleKey(r.atomA, r.atomB);
+                    this.bondRules[key] = { cutoff: r.cutoff };
+                }
+            }
             this.autoBondRulesSourcePhonon = this.phonon;
         }
 

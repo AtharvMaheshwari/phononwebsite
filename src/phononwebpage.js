@@ -1,5 +1,6 @@
 import { LocalDB } from './localdb.js';
 import { LocalDB2 } from './localdb2.js';
+import { LocalEventDB } from './localdb_event.js';
 import { ContribDB } from './contribdb.js';
 import { MaterialsProjectDB } from './mpdb.js';
 import { LocalPhononDB } from './localphonondb.js';
@@ -988,8 +989,10 @@ export class PhononWebpage {
         let source = new LocalDB();
         source.get_materials(addMaterials);
 
-        //local database 2 (A. Maheshwari)
         source = new LocalDB2();
+        source.get_materials(addMaterials);
+
+        source = new LocalEventDB();
         source.get_materials(addMaterials);
 
         //contributions database
@@ -1069,6 +1072,7 @@ export class PhononWebpage {
     getMaterialSourcePriority(material) {
         let source = material && material.source ? material.source : '';
         let sourcePriorities = {
+            'Model Materials': -1,
             localdb: 0,
             localdb2: 1,
             contribdb: 2,
