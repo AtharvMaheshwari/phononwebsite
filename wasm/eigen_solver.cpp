@@ -33,3 +33,33 @@ extern "C" int solve_hermitian_eigen(
     Eigen::Map<MatrixXcd>(reinterpret_cast<Complex*>(eigenvectors_out), size, size) = solver.eigenvectors();
     return 0;
 }
+
+extern "C" int solve_complex_eigen(
+    int size,
+    const double* matrix_interleaved,
+    double* eigenvalues_out,
+    double* eigenvectors_out
+) {
+    using Complex = std::complex<double>;
+    using MatrixXcd = Eigen::Matrix<Complex, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>;
+    using VectorXcd = Eigen::VectorXcd;
+
+    if (size <= 0 || !matrix_interleaved || !eigenvalues_out || !eigenvectors_out) {
+        return 2;
+    }
+
+    Eigen::Map<const MatrixXcd> matrix(
+        reinterpret_cast<const Complex*>(matrix_interleaved),
+        size,
+        size
+    );
+
+    Eigen::ComplexEigenSolver<MatrixXcd> solver(matrix, true);
+    if (solver.info() != Eigen::Success) {
+        return 1;
+    }
+
+    Eigen::Map<VectorXcd>(reinterpret_cast<Complex*>(eigenvalues_out), size) = solver.eigenvalues();
+    Eigen::Map<MatrixXcd>(reinterpret_cast<Complex*>(eigenvectors_out), size, size) = solver.eigenvectors();
+    return 0;
+}

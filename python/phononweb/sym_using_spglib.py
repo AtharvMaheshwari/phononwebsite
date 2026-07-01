@@ -178,6 +178,7 @@ def get_symmetry_labels_for_path(cell, qpoints, highsym_qpts, symprec=1e-5):
         mid_idx = (idx_start + idx_end) // 2
         q_mid = qpoints[mid_idx]
         
+        lg_ops = get_little_group_ops(cell, q_mid, symprec=symprec)
         pg_mid = get_little_group_point_group(cell, q_mid, symprec=symprec)
         segment_point_groups.append({
             "start_index": idx_start,
@@ -185,7 +186,9 @@ def get_symmetry_labels_for_path(cell, qpoints, highsym_qpts, symprec=1e-5):
             "start_label": label_start,
             "end_label": label_end,
             "midpoint_q": q_mid.tolist(),
-            "point_group": pg_mid
+            "point_group": pg_mid,
+            "rotations": [r.tolist() for r in lg_ops["rotations"]],
+            "translations": [t.tolist() for t in lg_ops["translations"]]
         })
     
     return {

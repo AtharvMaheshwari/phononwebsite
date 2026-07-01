@@ -4,6 +4,8 @@ import * as mat from './mat.js';
 import pako from 'pako';
 import { MaterialsProjectDB } from './mpdb.js';
 import { solveHermitianEigenSystem } from './dynamicalmatrix.js';
+import { PhononPropertyCalculator } from './phonon_properties.js';
+import { computeSymmetry } from './symmetry.js';
 
 var thz2cm1 = 33.35641;
 var ev2cm1 = 8065.73;
@@ -791,21 +793,44 @@ export class PhononJson {
                 this.segment_point_group_list.push({
                     start: startDist,
                     end: endDist,
-                    point_group: seg["point_group"]
+                    point_group: seg["point_group"],
+                    rotations: seg["rotations"],
+                    translations: seg["translations"]
                 });
             }
         }
+        
+        // Also map it to this.segment_point_groups for the calculator
+        this.segment_point_groups = data["segment_point_groups"];
 
         //get line breaks
         this.getLineBreaks(data);
 
-        let finalize = function() {
+        let finalize = async () => {
             if (this.vec) {
                 this.normalizeEigenvectors();
+                
+                // Compute on the fly if needed
+                if (!this.pam_total_compensated) {
+                    try {
+                        if (!this.segment_point_groups || this.segment_point_groups.length === 0) {
+                            await computeSymmetry(this);
+                        }
+                        
+                        let calc = new PhononPropertyCalculator(this);
+                        let chiral = calc.computeChiralProperties();
+                        Object.assign(this, chiral);
+                        
+                        let pam = calc.computePamProperties();
+                        Object.assign(this, pam);
+                    } catch (e) {
+                        console.error("Failed to compute properties on the fly:", e);
+                    }
+                }
             }
             this.invalidateEigenvectorCaches();
             callback();
-        }.bind(this);
+        };
 
         if (this.canComputeEigenvectorsOnDemand() && this.vec && this.vec.length && !this.vec[0]) {
             this.computeAllRuntimeEigenvectorsWithBandConnectionAsync(function(progress) {
