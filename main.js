@@ -99704,8 +99704,9 @@ class VibCrystal extends StructureViewerBase {
 
                     //velocity vector
                     v.set(vx,vy,vz);
-                    let vlength = v.length()/this.amplitude;
-                    let s = .5*this.arrowScale/this.amplitude;
+                    let effAmp = Math.max(this.amplitude, 1e-6);
+                    let vlength = v.length()/effAmp;
+                    let s = .5*this.arrowScale/effAmp;
 
                     this.arrowobjects[i].position.set(x+vx*s,y+vy*s,z+vz*s);
                     this.arrowobjects[i].scale.y = vlength*this.arrowScale;
@@ -100129,19 +100130,20 @@ class PhononHighcharts {
                 [117, 108, 198], // 5.5: Soft Periwinkle
                 [36, 162, 162],  // 6.0: Soft Cyan
             ];
-            let v = Math.max(0, value);
+            
+            let n_fold = Math.max(1, Math.round(max));
+            let v = Math.abs(value) % n_fold;
+            if (v < 0) v += n_fold;
+            
             let scaled_v = v * 2.0;
             let idx1 = Math.floor(scaled_v);
             let idx2 = idx1 + 1;
             let frac = scaled_v - idx1;
             
-            if (idx1 >= pamColors.length - 1) {
-                let c = pamColors[pamColors.length - 1];
-                return '#' + c[0].toString(16).padStart(2, '0') + c[1].toString(16).padStart(2, '0') + c[2].toString(16).padStart(2, '0');
-            }
+            let numSteps = n_fold * 2;
+            let c1 = pamColors[idx1 % pamColors.length];
+            let c2 = pamColors[(idx1 + 1 === numSteps) ? 0 : (idx2 % pamColors.length)];
             
-            let c1 = pamColors[idx1];
-            let c2 = pamColors[idx2];
             let r = Math.round(c1[0] + (c2[0] - c1[0]) * frac);
             let g = Math.round(c1[1] + (c2[1] - c1[1]) * frac);
             let b = Math.round(c1[2] + (c2[2] - c1[2]) * frac);
@@ -108579,8 +108581,8 @@ class PhononJson {
         let connectionOrder = [];
         for (let i = 0; i < metric.length; i++) {
             let overlaps = metric[i];
-            let maxValue = 0;
-            let maxIndex = 0;
+            let maxValue = -1;
+            let maxIndex = -1;
             for (let candidateIndex = metric.length - 1; candidateIndex >= 0; candidateIndex--) {
                 let value = overlaps[candidateIndex];
                 if (connectionOrder.indexOf(candidateIndex) !== -1) {
@@ -108589,6 +108591,15 @@ class PhononJson {
                 if (value > maxValue) {
                     maxValue = value;
                     maxIndex = candidateIndex;
+                }
+            }
+            if (maxIndex === -1) {
+                // Fallback to the first available index if overlap was completely zero
+                for (let fallback = 0; fallback < metric.length; fallback++) {
+                    if (connectionOrder.indexOf(fallback) === -1) {
+                        maxIndex = fallback;
+                        break;
+                    }
                 }
             }
             connectionOrder.push(maxIndex);
@@ -109080,7 +109091,11 @@ class PhononJson {
         hooks.onStart && hooks.onStart();
         let request;
         try {
-            request = $.getJSON(url,onLoadEndHandler.bind(this));
+            let fetchUrl = url;
+            if (fetchUrl.indexOf('?') === -1) {
+                fetchUrl += '?v=' + Date.now();
+            }
+            request = $.getJSON(fetchUrl,onLoadEndHandler.bind(this));
         } catch (error) {
             hooks.onError && hooks.onError({
                 kind: 'request',
@@ -109120,7 +109135,11 @@ class PhononJson {
 
         let xhr = new XMLHttpRequest();
         hooks.onStart && hooks.onStart();
-        xhr.open('GET', url, true);
+        let fetchUrl = url;
+        if (fetchUrl.indexOf('?') === -1) {
+            fetchUrl += '?v=' + Date.now();
+        }
+        xhr.open('GET', fetchUrl, true);
         xhr.responseType = 'arraybuffer';
 
         xhr.onprogress = function(event) {
@@ -109260,8 +109279,10 @@ class PhononJson {
         this.pam_total_uncompensated = data["pam_total_uncompensated"] || null;
         this.pam_total_compensated = data["pam_total_compensated"] || null;
         this.bond_rules = data["bond_rules"] || null;
-        this.pam_rotation_only = data["pam_rotation_only"] || null;
-        this.magnetic_moment = data["magnetic_moment"] || null;
+        // this.pam_rotation_only = data["pam_rotation_only"] || null;
+        this.magnetic_moment_x = data["magnetic_moment_x"] || null;
+        this.magnetic_moment_y = data["magnetic_moment_y"] || null;
+        this.magnetic_moment_z = data["magnetic_moment_z"] || null;
         
         if (this.dynamical_matrix && !this.dynamical_matrix.primitive_lattice && this.lat) {
             this.dynamical_matrix.primitive_lattice = this.lat;
@@ -110280,7 +110301,7 @@ class PhononWebpage {
     setTitle(dom_title)            { this.dom_title = dom_title; }
 
     setUpdateButton(dom_button) {
-        self = this;
+        let self = this;
         dom_button.click( function() { self.update(); } );
     }
 
@@ -110392,7 +110413,7 @@ class PhononWebpage {
                 '#8751b4', // 2.5: Soft Purple
                 '#c63f3f', // 3.0: Soft Red
                 '#876c87', // 3.5: Soft Mauve
-                '#24a2a2', // 4.0: Soft Cyan
+                '#909090', // 4.0: Gray (was Soft Cyan)
                 '#5a87b4', // 4.5: Soft Blue
                 '#b448b4', // 5.0: Soft Magenta
                 '#756cc6', // 5.5: Soft Periwinkle
@@ -110464,7 +110485,7 @@ class PhononWebpage {
         */
         this.k = 0;
         this.n = 0;
-        self = this;
+        let self = this;
 
         function set_name() {
             delete self.link;
@@ -110892,7 +110913,15 @@ class PhononWebpage {
             propLabel.innerText = propSelector.options[propSelector.selectedIndex].text + ':';
             
             if (typeof propVal === 'number') {
-                propValEl.innerText = Math.round(propVal * 1000) / 1000;
+                if (propName.includes('pam')) {
+                    let maxPam = (this.dispersion && this.dispersion.heatmapRange) ? this.dispersion.heatmapRange.max : 4.0;
+                    let n_fold = Math.max(1, Math.round(maxPam));
+                    let dispVal = Math.abs(propVal) % n_fold;
+                    if (Math.abs(dispVal - n_fold) < 1e-4) dispVal = 0.0;
+                    propValEl.innerText = Math.round(dispVal * 1000) / 1000;
+                } else {
+                    propValEl.innerText = Math.round(propVal * 1000) / 1000;
+                }
             } else {
                 propValEl.innerText = propVal;
             }
