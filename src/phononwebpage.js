@@ -152,7 +152,7 @@ export class PhononWebpage {
     setTitle(dom_title)            { this.dom_title = dom_title; }
 
     setUpdateButton(dom_button) {
-        self = this;
+        let self = this;
         dom_button.click( function() { self.update(); } );
     }
 
@@ -264,7 +264,7 @@ export class PhononWebpage {
                 '#8751b4', // 2.5: Soft Purple
                 '#c63f3f', // 3.0: Soft Red
                 '#876c87', // 3.5: Soft Mauve
-                '#24a2a2', // 4.0: Soft Cyan
+                '#909090', // 4.0: Gray (was Soft Cyan)
                 '#5a87b4', // 4.5: Soft Blue
                 '#b448b4', // 5.0: Soft Magenta
                 '#756cc6', // 5.5: Soft Periwinkle
@@ -336,7 +336,7 @@ export class PhononWebpage {
         */
         this.k = 0;
         this.n = 0;
-        self = this;
+        let self = this;
 
         function set_name() {
             delete self.link;
@@ -766,7 +766,15 @@ export class PhononWebpage {
             propLabel.innerText = propSelector.options[propSelector.selectedIndex].text + ':';
             
             if (typeof propVal === 'number') {
-                propValEl.innerText = Math.round(propVal * 1000) / 1000;
+                if (propName.includes('pam')) {
+                    let maxPam = (this.dispersion && this.dispersion.heatmapRange) ? this.dispersion.heatmapRange.max : 4.0;
+                    let n_fold = Math.max(1, Math.round(maxPam));
+                    let dispVal = Math.abs(propVal) % n_fold;
+                    if (Math.abs(dispVal - n_fold) < 1e-4) dispVal = 0.0;
+                    propValEl.innerText = Math.round(dispVal * 1000) / 1000;
+                } else {
+                    propValEl.innerText = Math.round(propVal * 1000) / 1000;
+                }
             } else {
                 propValEl.innerText = propVal;
             }

@@ -61,21 +61,21 @@ def open_file_phononwebsite(filename,port=8000,
 def estimate_band_connection(prev_eigvecs, eigvecs, prev_band_order):
     """ 
     A function to order the phonon eigenvectors taken from phonopy
+    Uses the Hungarian algorithm to find the strict optimal 1-to-1 permutation
+    that maximizes the overall overlap between previous and current eigenvectors.
     """
+    from scipy.optimize import linear_sum_assignment
+    
+    # Calculate overlap metric matrix: metric[i, j] = |<prev_i | current_j>|
     metric = np.abs(np.dot(prev_eigvecs.conjugate().T, eigvecs))
-    connection_order = []
-    indices = list(range(len(metric)))
-    indices.reverse()
-    for overlaps in metric:
-        maxval = 0
-        for i in indices:
-            val = overlaps[i]
-            if i in connection_order:
-                continue
-            if val > maxval:
-                maxval = val
-                maxindex = i
-        connection_order.append(maxindex)
+    
+    # linear_sum_assignment minimizes the cost. We want to maximize metric,
+    # so we supply -metric to the solver.
+    row_ind, col_ind = linear_sum_assignment(-metric)
+    
+    # row_ind is guaranteed to be [0, 1, ..., n-1]
+    # col_ind[i] gives the index in the current eigvecs that corresponds to prev_eigvecs[i]
+    connection_order = col_ind.tolist()
 
     band_order = [connection_order[x] for x in prev_band_order]
     return band_order

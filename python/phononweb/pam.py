@@ -33,7 +33,7 @@ def get_rotation_axis_angle(R_car):
         
     # Standard rotation: axis is antisymmetric component
     axis = np.array([
-        R_car[2, 1] - R_car[1, 2],
+        R_car[2, 1] - R_car[1, 2],  
         R_car[0, 2] - R_car[2, 0],
         R_car[1, 0] - R_car[0, 1]
     ], dtype=float)
@@ -61,30 +61,32 @@ def build_representation_matrices(cell, q, R, tau):
     R_car = np.dot(A, np.dot(R, A_inv))
     
     D = np.zeros((3*natoms, 3*natoms), dtype=complex)
-    S = np.zeros((3*natoms, 3*natoms), dtype=complex)
-    L = np.zeros((3*natoms, 3*natoms), dtype=complex)
-    
-    for i in range(natoms):
-        S[3*i:3*i+3, 3*i:3*i+3] = R_car
     
     for i in range(natoms):
         r_prime = np.dot(R, pos_red[i]) + tau
         diffs = pos_red - r_prime
         diffs_mod1 = diffs - np.round(diffs)
-        dists = np.linalg.norm(diffs_mod1, axis=1)
+        diffs_car = np.dot(diffs_mod1, A.T)
+        dists = np.linalg.norm(diffs_car, axis=1)
         j = np.argmin(dists)
         if dists[j] > 1e-3:
             raise ValueError(f"Symmetry mapping failed for atom {i}")
         R_L = np.round(r_prime - pos_red[j])
-        phase_RL = np.exp(-1j * 2.0 * np.pi * np.dot(q, R_L))
+        
+        # Phonopy Type II convention:
+        # D_ji = R_car * exp(-i 2pi G . r_j)
+        G = np.round(np.dot(R, q) - q)
+        phase_RL = np.exp(-2.0j * np.pi * np.dot(G, pos_red[j]))
+            
         D[3*j:3*j+3, 3*i:3*i+3] = phase_RL * R_car
-        L[3*j:3*j+3, 3*i:3*i+3] = phase_RL * np.eye(3)
-    return D, S, L
+    return D
 
 def compute_pam_properties(phonon_obj):
     if not hasattr(phonon_obj, 'eigenvectors') or phonon_obj.eigenvectors is None:
         return {}
-        
+    
+    #initialization of arrays:
+
     eigs_real_imag = phonon_obj.eigenvectors
     nqpoints, nphons, natoms, _, _ = eigs_real_imag.shape
     
@@ -97,11 +99,10 @@ def compute_pam_properties(phonon_obj):
     
     pam_tot_uncomp = np.zeros((nqpoints, nphons))
     pam_tot_comp = np.zeros((nqpoints, nphons))
-    pam_rot = np.zeros((nqpoints, nphons))
     
     # Store symmetry-adapted eigenvectors back to the array
     eigs_adapted = np.zeros_like(eigs)
-    
+
     line_breaks = getattr(phonon_obj, 'line_breaks', None)
     if line_breaks and len(line_breaks) > 0:
         segments = line_breaks
@@ -174,12 +175,23 @@ def compute_pam_properties(phonon_obj):
         for iq in range(start_idx, end_idx):
             if iq >= nqpoints:
                 continue
+                
+            # --- GLOBAL TRACKING FIX ---
+            # Reorder eigs[iq] to match eigs_adapted[iq-1] across the whole segment!
+            if iq > start_idx:
+                from scipy.optimize import linear_sum_assignment
+                overlap_mat = np.abs(np.dot(eigs_adapted[iq-1].conj(), eigs[iq].T))
+                row_ind, col_ind = linear_sum_assignment(-overlap_mat)
+                eigs[iq] = eigs[iq, col_ind]
+                freqs[iq] = freqs[iq, col_ind]
+            # ---------------------------
+
             q = qpoints[iq]
             w = freqs[iq]
             
             # Construct full representation matrices for this q and operation
             try:
-                D, S, L = build_representation_matrices(cell, q, R_gen, tau_gen)
+                D = build_representation_matrices(cell, q, R_gen, tau_gen)
             except ValueError:
                 # If symmetry mapping fails, just fallback
                 eigs_adapted[iq] = eigs[iq]
@@ -207,18 +219,13 @@ def compute_pam_properties(phonon_obj):
                     # <e | D | e>
                     lambda_D = np.vdot(e_vec, np.dot(D, e_vec))
                     
-                    # Original logic (uncompensated D matrix)
-                    # phase = np.angle(lambda_D)
-                    # pam = (phase / angle_gen) % n_axis
-                    # pam_tot[iq, ibnd] = pam
-                    
                     # 1. Uncompensated (drifting)
                     phase_uncomp = np.angle(lambda_D)
                     pam_tot_uncomp[iq, ibnd] = (phase_uncomp / angle_gen) % n_axis
                     
                     # 2. Compensated (quantized for non-symmorphic)
-                    # D_comp = D * exp(-i 2pi q . t)
-                    phase_comp_factor = np.exp(-2.0j * np.pi * np.dot(q, t_vec))
+                    # D_comp = D * exp(i 2pi q . t)
+                    phase_comp_factor = np.exp(2.0j * np.pi * np.dot(q, t_vec))
                     lambda_D_comp = lambda_D * phase_comp_factor
                     phase_comp = np.angle(lambda_D_comp)
                     pam_comp = (phase_comp / angle_gen) % n_axis
@@ -226,15 +233,6 @@ def compute_pam_properties(phonon_obj):
                     if np.abs(pam_comp_err) < 1e-2:
                         pam_comp = np.round(pam_comp) % n_axis
                     pam_tot_comp[iq, ibnd] = pam_comp
-                    
-                    # <e | S | e>
-                    lambda_S = np.vdot(e_vec, np.dot(S, e_vec))
-                    phase_S = np.angle(lambda_S)
-                    pam_S = (phase_S / angle_gen) % n_axis
-                    pam_S_error = pam_S - np.round(pam_S)
-                    if np.abs(pam_S_error) < 1e-2:
-                        pam_S = np.round(pam_S) % n_axis
-                    pam_rot[iq, ibnd] = pam_S
                     
                     eigs_adapted[iq, ibnd] = e_vec
                 else:
@@ -244,8 +242,11 @@ def compute_pam_properties(phonon_obj):
                         for b in range(m_size):
                             M_D[a, b] = np.vdot(basis[a], np.dot(D, basis[b]))
                             
-                    # Diagonalize M_D to find symmetry adapted modes
-                    eigvals_D, eigvecs_D = np.linalg.eig(M_D)
+                    # Use Schur decomposition to guarantee perfectly orthogonal eigenvectors
+                    from scipy.linalg import schur
+                    T, U = schur(M_D, output='complex')
+                    eigvals_D = np.diag(T)
+                    eigvecs_D = U
                     
                     # Compute adapted modes
                     adapted_modes = []
@@ -268,21 +269,13 @@ def compute_pam_properties(phonon_obj):
                         for b in range(m_size):
                             overlap[a, b] = np.abs(np.vdot(adapted_modes[a], ref_modes[b]))
                             
-                    # Greedy maximum weight matching
-                    matched_m = set()
-                    matched_b = set()
-                    best_match = {}
-                    pairs = []
-                    for a in range(m_size):
-                        for b in range(m_size):
-                            pairs.append((overlap[a, b], a, b))
-                    pairs.sort(reverse=True, key=lambda x: x[0])
+                    # Strict maximum weight bipartite matching using the Hungarian algorithm
+                    from scipy.optimize import linear_sum_assignment
+                    # linear_sum_assignment minimizes cost, so we supply -overlap to maximize
+                    row_ind, col_ind = linear_sum_assignment(-overlap)
                     
-                    for val, a, b in pairs:
-                        if a not in matched_m and b not in matched_b:
-                            best_match[b] = a
-                            matched_m.add(a)
-                            matched_b.add(b)
+                    # col_ind[a] gives the index in ref_modes (i.e. 'b_idx') that adapted_modes[a] maps to
+                    best_match = {col_ind[a]: a for a in range(m_size)}
 
                     # Store adapted eigenvectors and their phases
                     for b_idx, j in enumerate(manifold):
@@ -308,15 +301,6 @@ def compute_pam_properties(phonon_obj):
                             pam_comp = np.round(pam_comp) % n_axis
                         pam_tot_comp[iq, j] = pam_comp
                         
-                        # <adapted_mode | S | adapted_mode>
-                        lambda_S = np.vdot(adapted_mode, np.dot(S, adapted_mode))
-                        phase_S = np.angle(lambda_S)
-                        pam_S = (phase_S / angle_gen) % n_axis
-                        pam_S_error = pam_S - np.round(pam_S)
-                        if np.abs(pam_S_error) < 1e-2:
-                            pam_S = np.round(pam_S) % n_axis
-                        pam_rot[iq, j] = pam_S
-                        
                         eigs_adapted[iq, j] = adapted_mode
 
     # Push the symmetry adapted vectors back to the original payload structure
@@ -330,5 +314,4 @@ def compute_pam_properties(phonon_obj):
     return {
         'pam_total_uncompensated': pam_tot_uncomp.tolist(),
         'pam_total_compensated': pam_tot_comp.tolist(),
-        'pam_rotation_only': pam_rot.tolist()
     }

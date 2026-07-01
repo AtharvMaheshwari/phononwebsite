@@ -47,8 +47,8 @@ export class PhononJson {
         let connectionOrder = [];
         for (let i = 0; i < metric.length; i++) {
             let overlaps = metric[i];
-            let maxValue = 0;
-            let maxIndex = 0;
+            let maxValue = -1;
+            let maxIndex = -1;
             for (let candidateIndex = metric.length - 1; candidateIndex >= 0; candidateIndex--) {
                 let value = overlaps[candidateIndex];
                 if (connectionOrder.indexOf(candidateIndex) !== -1) {
@@ -57,6 +57,15 @@ export class PhononJson {
                 if (value > maxValue) {
                     maxValue = value;
                     maxIndex = candidateIndex;
+                }
+            }
+            if (maxIndex === -1) {
+                // Fallback to the first available index if overlap was completely zero
+                for (let fallback = 0; fallback < metric.length; fallback++) {
+                    if (connectionOrder.indexOf(fallback) === -1) {
+                        maxIndex = fallback;
+                        break;
+                    }
                 }
             }
             connectionOrder.push(maxIndex);
@@ -549,7 +558,11 @@ export class PhononJson {
         hooks.onStart && hooks.onStart();
         let request;
         try {
-            request = $.getJSON(url,onLoadEndHandler.bind(this));
+            let fetchUrl = url;
+            if (fetchUrl.indexOf('?') === -1) {
+                fetchUrl += '?v=' + Date.now();
+            }
+            request = $.getJSON(fetchUrl,onLoadEndHandler.bind(this));
         } catch (error) {
             hooks.onError && hooks.onError({
                 kind: 'request',
@@ -589,7 +602,11 @@ export class PhononJson {
 
         let xhr = new XMLHttpRequest();
         hooks.onStart && hooks.onStart();
-        xhr.open('GET', url, true);
+        let fetchUrl = url;
+        if (fetchUrl.indexOf('?') === -1) {
+            fetchUrl += '?v=' + Date.now();
+        }
+        xhr.open('GET', fetchUrl, true);
         xhr.responseType = 'arraybuffer';
 
         xhr.onprogress = function(event) {
@@ -730,8 +747,10 @@ export class PhononJson {
         this.pam_total_uncompensated = data["pam_total_uncompensated"] || null;
         this.pam_total_compensated = data["pam_total_compensated"] || null;
         this.bond_rules = data["bond_rules"] || null;
-        this.pam_rotation_only = data["pam_rotation_only"] || null;
-        this.magnetic_moment = data["magnetic_moment"] || null;
+        // this.pam_rotation_only = data["pam_rotation_only"] || null;
+        this.magnetic_moment_x = data["magnetic_moment_x"] || null;
+        this.magnetic_moment_y = data["magnetic_moment_y"] || null;
+        this.magnetic_moment_z = data["magnetic_moment_z"] || null;
         
         if (this.dynamical_matrix && !this.dynamical_matrix.primitive_lattice && this.lat) {
             this.dynamical_matrix.primitive_lattice = this.lat;

@@ -166,12 +166,10 @@ class Phonon():
        
         def collinear(a,b,c):
             """
-            checkkk if three points are collinear
+            check if three points are collinear
             """
-            d = [[a[0],a[1],1],
-                 [b[0],b[1],1],
-                 [c[0],c[1],1]]
-            return np.isclose(np.linalg.det(d),0,atol=1e-5)
+            cross_prod = np.cross(np.array(b)-np.array(a), np.array(c)-np.array(b))
+            return np.isclose(np.linalg.norm(cross_prod), 0, atol=1e-5)
 
         #iterate over qpoints
         qpoints = self.qpoints;

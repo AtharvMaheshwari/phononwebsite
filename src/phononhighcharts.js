@@ -329,19 +329,20 @@ export class PhononHighcharts {
                 [117, 108, 198], // 5.5: Soft Periwinkle
                 [36, 162, 162],  // 6.0: Soft Cyan
             ];
-            let v = Math.max(0, value);
+            
+            let n_fold = Math.max(1, Math.round(max));
+            let v = Math.abs(value) % n_fold;
+            if (v < 0) v += n_fold;
+            
             let scaled_v = v * 2.0;
             let idx1 = Math.floor(scaled_v);
             let idx2 = idx1 + 1;
             let frac = scaled_v - idx1;
             
-            if (idx1 >= pamColors.length - 1) {
-                let c = pamColors[pamColors.length - 1];
-                return '#' + c[0].toString(16).padStart(2, '0') + c[1].toString(16).padStart(2, '0') + c[2].toString(16).padStart(2, '0');
-            }
+            let numSteps = n_fold * 2;
+            let c1 = pamColors[idx1 % pamColors.length];
+            let c2 = pamColors[(idx1 + 1 === numSteps) ? 0 : (idx2 % pamColors.length)];
             
-            let c1 = pamColors[idx1];
-            let c2 = pamColors[idx2];
             let r = Math.round(c1[0] + (c2[0] - c1[0]) * frac);
             let g = Math.round(c1[1] + (c2[1] - c1[1]) * frac);
             let b = Math.round(c1[2] + (c2[2] - c1[2]) * frac);

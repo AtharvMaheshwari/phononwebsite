@@ -1739,8 +1739,9 @@ export class VibCrystal extends StructureViewerBase {
 
                     //velocity vector
                     v.set(vx,vy,vz);
-                    let vlength = v.length()/this.amplitude;
-                    let s = .5*this.arrowScale/this.amplitude;
+                    let effAmp = Math.max(this.amplitude, 1e-6);
+                    let vlength = v.length()/effAmp;
+                    let s = .5*this.arrowScale/effAmp;
 
                     this.arrowobjects[i].position.set(x+vx*s,y+vy*s,z+vz*s);
                     this.arrowobjects[i].scale.y = vlength*this.arrowScale;
