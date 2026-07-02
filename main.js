@@ -94704,13 +94704,7 @@ const sharedViewerMethods = {
     },
 
     createShadedMaterial(config = {}) {
-        if (this.lines) {
-            return new MeshBasicMaterial({
-                ...config,
-                wireframe: true,
-                color: 0x000000
-            });
-        }
+
         if (!this.shading) {
             return new MeshBasicMaterial(config);
         }
@@ -97067,7 +97061,7 @@ class StructureViewerBase {
     constructor() {
         this.display = 'jmol';
         this.shading = true;
-        this.lines = false;
+
         this.container = null;
         this.scene = null;
         this.camera = null;
@@ -98342,7 +98336,7 @@ class VibCrystal extends StructureViewerBase {
 
     setCameraDirectionButton(dom_button,direction) {
     /* Bind the action to set the direction of the camera using direction
-       direction can be 'x','y','z', or 'q'
+       direction can be 'x','y','z', or 'q-vec' or 'q-perp'
     */
         let self = this;
         dom_button.click( function() { self.setCameraDirection(direction); } );
@@ -98421,15 +98415,6 @@ class VibCrystal extends StructureViewerBase {
         this.shading = dom_checkbox.prop('checked');
         dom_checkbox.click( function() {
             self.shading = this.checked;
-            self.updatelocal();
-        } );
-    }
-
-    setLinesCheckbox(dom_checkbox) {
-        let self = this;
-        this.lines = dom_checkbox.prop('checked');
-        dom_checkbox.click( function() {
-            self.lines = this.checked;
             self.updatelocal();
         } );
     }
@@ -99436,6 +99421,7 @@ class VibCrystal extends StructureViewerBase {
         ]);
         if (this.autoBondRulesSourcePhonon !== this.phonon || !Object.keys(this.bondRules).length) {
             this.initializeBondRulesFromAtoms(this.atoms, this.phonon.atom_numbers);
+            // this is a new feature, which let's you add bonds to a material manually. This is useful for self created or model materials.
             if (this.phonon && this.phonon.bond_rules) {
                 for (let i = 0; i < this.phonon.bond_rules.length; i++) {
                     let r = this.phonon.bond_rules[i];
@@ -99475,9 +99461,7 @@ class VibCrystal extends StructureViewerBase {
     }
 
 
-
-
-
+    // all of this adds to the top right corner of the screen a small 3D representation of the axes and the q-vector arrow
     addQVectorArrow() {
         if (!this.hudScene) {
             this.hudScene = new Scene();
@@ -99704,7 +99688,7 @@ class VibCrystal extends StructureViewerBase {
 
                     //velocity vector
                     v.set(vx,vy,vz);
-                    let effAmp = Math.max(this.amplitude, 1e-6);
+                    let effAmp = Math.max(this.amplitude, 1e-6); // if amplitude is zero, then we won't divide it by zero
                     let vlength = v.length()/effAmp;
                     let s = .5*this.arrowScale/effAmp;
 
@@ -110413,7 +110397,7 @@ class PhononWebpage {
                 '#8751b4', // 2.5: Soft Purple
                 '#c63f3f', // 3.0: Soft Red
                 '#876c87', // 3.5: Soft Mauve
-                '#909090', // 4.0: Gray (was Soft Cyan)
+                '#00384e', // 4.0: Soft Cyan)
                 '#5a87b4', // 4.5: Soft Blue
                 '#b448b4', // 5.0: Soft Magenta
                 '#756cc6', // 5.5: Soft Periwinkle
@@ -110850,7 +110834,7 @@ class PhononWebpage {
         this.dom_n.attr('step', 1);
         this.dom_n.val(this.getEnergyOrderFromBandIndex(this.k, this.n) + 1);
         
-        // Highlight inputs briefly
+        // Highlight inputs briefly : When you click a point on the graph, the application figures out which q-point and band you clicked, updates the 3D visualizer to animate that exact state, and then uses this code to quickly flash the q-point and mode boxes blue. This visual cue helps the user understand that clicking the graph has automatically updated the controls for the 3D model.
         let highlightStyle = 'box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.4); border-color: #0284c7; transition: all 0.3s;';
         let normalStyle = 'transition: all 0.5s;';
         this.dom_k.attr('style', highlightStyle);
@@ -110858,7 +110842,7 @@ class PhononWebpage {
         setTimeout(() => {
             if (this.dom_k) this.dom_k.attr('style', normalStyle);
             if (this.dom_n) this.dom_n.attr('style', normalStyle);
-        }, 600);
+        }, 1000);
     }
 
     selectModeByBandIndex(k, n, syncChart=true) {
@@ -111041,7 +111025,7 @@ class PhononWebpage {
         } else {
             this.dispersion.update(this.phonon, this.getDispersionOptions());
         }
-        // ADD THIS — re-select the point after any appearance refresh
+        //re-select the point after any appearance refresh only, if property changes this ensures the selected point is still selected
         if (this.dispersion.selectModePoint) {
             this.dispersion.selectModePoint(this.phonon, this.k, this.n);
         }
@@ -111416,17 +111400,7 @@ v.setCameraDirectionButton($$1('#cameraqperp'), 'q-perp');
 v.setDisplayCombo($$1('#displaystyle'));
 v.setCellCheckbox($$1('#drawcell'));
 
-$$1('input[name="appearance_radio"]').change(function() {
-    let val = $$1('input[name="appearance_radio"]:checked').val();
-    if (val === 'shading') {
-        v.shading = true;
-        v.lines = false;
-    } else if (val === 'color') {
-        v.shading = false;
-        v.lines = false;
-    }
-    v.updatelocal(true);
-});
+v.setShadingCheckbox($$1('#drawshading'));
 v.setWebmButton($$1('#webmbutton'));
 v.setGifButton($$1('#gifbutton'));
 v.setArrowsCheckbox($$1('#drawvectors'));
