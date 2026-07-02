@@ -26,7 +26,7 @@ export class StructureViewerBase {
     constructor() {
         this.display = 'jmol';
         this.shading = true;
-        this.lines = false;
+
         this.container = null;
         this.scene = null;
         this.camera = null;

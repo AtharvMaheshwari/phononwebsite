@@ -74,17 +74,7 @@ v.setCameraDirectionButton($('#cameraqperp'), 'q-perp');
 v.setDisplayCombo($('#displaystyle'));
 v.setCellCheckbox($('#drawcell'));
 
-$('input[name="appearance_radio"]').change(function() {
-    let val = $('input[name="appearance_radio"]:checked').val();
-    if (val === 'shading') {
-        v.shading = true;
-        v.lines = false;
-    } else if (val === 'color') {
-        v.shading = false;
-        v.lines = false;
-    }
-    v.updatelocal(true);
-});
+v.setShadingCheckbox($('#drawshading'));
 v.setWebmButton($('#webmbutton'));
 v.setGifButton($('#gifbutton'));
 v.setArrowsCheckbox($('#drawvectors'));

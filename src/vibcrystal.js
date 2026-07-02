@@ -377,7 +377,7 @@ export class VibCrystal extends StructureViewerBase {
 
     setCameraDirectionButton(dom_button,direction) {
     /* Bind the action to set the direction of the camera using direction
-       direction can be 'x','y','z', or 'q'
+       direction can be 'x','y','z', or 'q-vec' or 'q-perp'
     */
         let self = this;
         dom_button.click( function() { self.setCameraDirection(direction) } );
@@ -456,15 +456,6 @@ export class VibCrystal extends StructureViewerBase {
         this.shading = dom_checkbox.prop('checked');
         dom_checkbox.click( function() {
             self.shading = this.checked;
-            self.updatelocal();
-        } );
-    }
-
-    setLinesCheckbox(dom_checkbox) {
-        let self = this;
-        this.lines = dom_checkbox.prop('checked');
-        dom_checkbox.click( function() {
-            self.lines = this.checked;
             self.updatelocal();
         } );
     }
@@ -1471,6 +1462,7 @@ export class VibCrystal extends StructureViewerBase {
         ]);
         if (this.autoBondRulesSourcePhonon !== this.phonon || !Object.keys(this.bondRules).length) {
             this.initializeBondRulesFromAtoms(this.atoms, this.phonon.atom_numbers);
+            // this is a new feature, which let's you add bonds to a material manually. This is useful for self created or model materials.
             if (this.phonon && this.phonon.bond_rules) {
                 for (let i = 0; i < this.phonon.bond_rules.length; i++) {
                     let r = this.phonon.bond_rules[i];
@@ -1510,9 +1502,7 @@ export class VibCrystal extends StructureViewerBase {
     }
 
 
-
-
-
+    // all of this adds to the top right corner of the screen a small 3D representation of the axes and the q-vector arrow
     addQVectorArrow() {
         if (!this.hudScene) {
             this.hudScene = new THREE.Scene();
@@ -1739,7 +1729,7 @@ export class VibCrystal extends StructureViewerBase {
 
                     //velocity vector
                     v.set(vx,vy,vz);
-                    let effAmp = Math.max(this.amplitude, 1e-6);
+                    let effAmp = Math.max(this.amplitude, 1e-6); // if amplitude is zero, then we won't divide it by zero
                     let vlength = v.length()/effAmp;
                     let s = .5*this.arrowScale/effAmp;
 
