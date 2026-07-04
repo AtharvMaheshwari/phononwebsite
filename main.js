@@ -94231,10 +94231,93 @@ var covalent_radii =
 
 const pi$1 = 3.14159265359;
 
+function matrix_inverse(a)
+{
+    var det = matrix_determinant(a);
+    var c = [[0,0,0],[0,0,0],[0,0,0]];
+
+    c[0][0] = (a[1][1] * a[2][2] - a[1][2] * a[2][1]) / det;
+    c[1][0] = (a[1][2] * a[2][0] - a[1][0] * a[2][2]) / det;
+    c[2][0] = (a[1][0] * a[2][1] - a[1][1] * a[2][0]) / det;
+    c[0][1] = (a[2][1] * a[0][2] - a[2][2] * a[0][1]) / det;
+    c[1][1] = (a[2][2] * a[0][0] - a[2][0] * a[0][2]) / det;
+    c[2][1] = (a[2][0] * a[0][1] - a[2][1] * a[0][0]) / det;
+    c[0][2] = (a[0][1] * a[1][2] - a[0][2] * a[1][1]) / det;
+    c[1][2] = (a[0][2] * a[1][0] - a[0][0] * a[1][2]) / det;
+    c[2][2] = (a[0][0] * a[1][1] - a[0][1] * a[1][0]) / det;
+
+    return c;
+}
+
+/*
+from http://jsperf.com/ie-3x3-matrix-multiply
+*/
+function matrix_multiply(m1, m2) {
+    var m1_0 = m1[0];
+    var m1_1 = m1[1];
+    var m1_2 = m1[2];
+    var m2_0 = m2[0];
+    var m2_1 = m2[1];
+    var m2_2 = m2[2];
+
+    var m1_0_0 = m1_0[0];
+    var m1_0_1 = m1_0[1];
+    var m1_0_2 = m1_0[2];
+    var m1_1_0 = m1_1[0];
+    var m1_1_1 = m1_1[1];
+    var m1_1_2 = m1_1[2];
+    var m1_2_0 = m1_2[0];
+    var m1_2_1 = m1_2[1];
+    var m1_2_2 = m1_2[2];
+
+    var m2_0_0 = m2_0[0];
+    var m2_0_1 = m2_0[1];
+    var m2_0_2 = m2_0[2];
+    var m2_1_0 = m2_1[0];
+    var m2_1_1 = m2_1[1];
+    var m2_1_2 = m2_1[2];
+    var m2_2_0 = m2_2[0];
+    var m2_2_1 = m2_2[1];
+    var m2_2_2 = m2_2[2];
+
+    return [
+    [m1_0_0 * m2_0_0 + m1_0_1 * m2_1_0 + m1_0_2 * m2_2_0,
+     m1_0_0 * m2_0_1 + m1_0_1 * m2_1_1 + m1_0_2 * m2_2_1,
+     m1_0_0 * m2_0_2 + m1_0_1 * m2_1_2 + m1_0_2 * m2_2_2],
+    [m1_1_0 * m2_0_0 + m1_1_1 * m2_1_0 + m1_1_2 * m2_2_0,
+     m1_1_0 * m2_0_1 + m1_1_1 * m2_1_1 + m1_1_2 * m2_2_1,
+     m1_1_0 * m2_0_2 + m1_1_1 * m2_1_2 + m1_1_2 * m2_2_2],
+    [m1_2_0 * m2_0_0 + m1_2_1 * m2_1_0 + m1_2_2 * m2_2_0,
+     m1_2_0 * m2_0_1 + m1_2_1 * m2_1_1 + m1_2_2 * m2_2_1,
+     m1_2_0 * m2_0_2 + m1_2_1 * m2_1_2 + m1_2_2 * m2_2_2]];
+}
+
+
+function matrix_transpose(a) {
+  var c = [[0,0,0],[0,0,0],[0,0,0]];
+
+  c[0][0] = a[0][0];
+  c[0][1] = a[1][0];
+  c[0][2] = a[2][0];
+  c[1][0] = a[0][1];
+  c[1][1] = a[1][1];
+  c[1][2] = a[2][1];
+  c[2][0] = a[0][2];
+  c[2][1] = a[1][2];
+  c[2][2] = a[2][2];
+  return c;
+}
+
 function matrix_scale(a,scale) {
   return [a[0].map(function(x) {return x*scale}),
           a[1].map(function(x) {return x*scale}),
           a[2].map(function(x) {return x*scale})];
+}
+
+function matrix_determinant(a) {
+    return a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1])
+         + a[0][1] * (a[1][2] * a[2][0] - a[1][0] * a[2][2])
+         + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]);
 }
 
 function vec_scale(a,scale) {
@@ -94704,7 +94787,13 @@ const sharedViewerMethods = {
     },
 
     createShadedMaterial(config = {}) {
-
+        if (this.lines) {
+            return new MeshBasicMaterial({
+                ...config,
+                wireframe: true,
+                color: 0x000000
+            });
+        }
         if (!this.shading) {
             return new MeshBasicMaterial(config);
         }
@@ -97061,7 +97150,7 @@ class StructureViewerBase {
     constructor() {
         this.display = 'jmol';
         this.shading = true;
-
+        this.lines = false;
         this.container = null;
         this.scene = null;
         this.camera = null;
@@ -98073,6 +98162,7 @@ class VibCrystal extends StructureViewerBase {
         this.arrows = false;
         this.cell = false;
         this.paused = false;
+        this.symmetryAnimationActive = false;
         this.initialized = false;
 
         this.container = container;
@@ -98336,7 +98426,7 @@ class VibCrystal extends StructureViewerBase {
 
     setCameraDirectionButton(dom_button,direction) {
     /* Bind the action to set the direction of the camera using direction
-       direction can be 'x','y','z', or 'q-vec' or 'q-perp'
+       direction can be 'x','y','z', or 'q'
     */
         let self = this;
         dom_button.click( function() { self.setCameraDirection(direction); } );
@@ -98415,6 +98505,15 @@ class VibCrystal extends StructureViewerBase {
         this.shading = dom_checkbox.prop('checked');
         dom_checkbox.click( function() {
             self.shading = this.checked;
+            self.updatelocal();
+        } );
+    }
+
+    setLinesCheckbox(dom_checkbox) {
+        let self = this;
+        this.lines = dom_checkbox.prop('checked');
+        dom_checkbox.click( function() {
+            self.lines = this.checked;
             self.updatelocal();
         } );
     }
@@ -99421,7 +99520,6 @@ class VibCrystal extends StructureViewerBase {
         ]);
         if (this.autoBondRulesSourcePhonon !== this.phonon || !Object.keys(this.bondRules).length) {
             this.initializeBondRulesFromAtoms(this.atoms, this.phonon.atom_numbers);
-            // this is a new feature, which let's you add bonds to a material manually. This is useful for self created or model materials.
             if (this.phonon && this.phonon.bond_rules) {
                 for (let i = 0; i < this.phonon.bond_rules.length; i++) {
                     let r = this.phonon.bond_rules[i];
@@ -99456,12 +99554,17 @@ class VibCrystal extends StructureViewerBase {
         if (notifyAppearanceUpdate && typeof this.onAppearanceUpdated === 'function') {
             this.onAppearanceUpdated();
         }
+        if (typeof this.onStructureRebuilt === 'function') {
+            this.onStructureRebuilt();
+        }
         this.needsRender = true;
         this.startAnimationLoop();
     }
 
 
-    // all of this adds to the top right corner of the screen a small 3D representation of the axes and the q-vector arrow
+
+
+
     addQVectorArrow() {
         if (!this.hudScene) {
             this.hudScene = new Scene();
@@ -99660,7 +99763,7 @@ class VibCrystal extends StructureViewerBase {
         let phaseIm = this.amplitude * Math.sin(phaseAngle);
         let v = new Vector3();
 
-        if (!this.paused) {
+        if (!this.paused && !this.symmetryAnimationActive) {
 
             //update positions according to vibrational modes
             for (let i=0; i<this.atomobjects.length; i++) {
@@ -99688,7 +99791,7 @@ class VibCrystal extends StructureViewerBase {
 
                     //velocity vector
                     v.set(vx,vy,vz);
-                    let effAmp = Math.max(this.amplitude, 1e-6); // if amplitude is zero, then we won't divide it by zero
+                    let effAmp = Math.max(this.amplitude, 1e-6);
                     let vlength = v.length()/effAmp;
                     let s = .5*this.arrowScale/effAmp;
 
@@ -99824,9 +99927,14 @@ class PhononHighcharts {
             return function() {
                 let dist = this.value;
                 // Check if this tick is at a high-symmetry point
-                if (phonon.highsym_point_group_map && phonon.highsym_point_group_map[dist]) {
-                    let pg = phonon.highsym_point_group_map[dist];
-                    return '<span style="color:#0066cc; font-size:11px; font-weight:600;">' + pg + '</span>';
+                if (phonon.highsym_point_group_map) {
+                    let tol = 1e-6;
+                    for (let d in phonon.highsym_point_group_map) {
+                        if (Math.abs(dist - Number(d)) < tol) {
+                            let pg = phonon.highsym_point_group_map[d];
+                            return '<span style="color:#0066cc; font-size:11px; font-weight:600;">' + pg + '</span>';
+                        }
+                    }
                 }
                 // Check if this tick is a segment midpoint
                 if (phonon.segment_point_group_list) {
@@ -100559,6 +100667,55 @@ class PhononHighcharts {
         }
         this.chart = globalThis.Highcharts.chart(this.container[0], this.HighchartsOptions);
         this.refreshLegendAndWeights();
+        this.addGlossaryButton();
+    }
+
+    addGlossaryButton() {
+        if (!this.container) return;
+        let parent = this.container.parent();
+        if (parent.find('#sym-glossary-btn').length > 0) return;
+
+        let glossaryHtml = `
+            <div id="sym-glossary-btn" style="position:absolute; top: 10px; left: 45px; z-index: 100;">
+                <div class="sym-glossary-icon" style="
+                    width: 24px; height: 24px; border-radius: 50%;
+                    background: rgba(2, 132, 199, 0.8); color: white;
+                    display: flex; justify-content: center; align-items: center;
+                    font-weight: bold; font-size: 14px; cursor: help;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                    backdrop-filter: blur(4px);
+                ">?</div>
+                <div class="sym-glossary-content" style="
+                    display: none; position: absolute; top: 30px; left: 0;
+                    width: 320px; padding: 15px; border-radius: 8px;
+                    background: rgba(255, 255, 255, 0.7);
+                    backdrop-filter: blur(10px);
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                    border: 1px solid rgba(255,255,255,0.5);
+                    font-size: 12px; color: #333; line-height: 1.5;
+                ">
+                    <h4 style="margin-top:0; color:#0284c7; border-bottom:1px solid #ccc; padding-bottom:5px;">Symmetry Glossary</h4>
+                    <b>Cₙ</b> : n-fold cyclic rotation axis<br>
+                    <b>Sₙ</b> : n-fold improper rotation (rotation + reflection)<br>
+                    <b>Dₙ</b> : Dihedral (Cₙ plus n perpendicular C₂ axes)<br>
+                    <b>T, O, I</b> : Tetrahedral, Octahedral, Icosahedral symmetry<br>
+                    <b>i</b> : Inversion center<br>
+                    <b>h</b> : horizontal mirror plane (⊥ to principal axis)<br>
+                    <b>v</b> : vertical mirror plane (|| to principal axis)<br>
+                    <b>d</b> : diagonal mirror plane (bisects C₂ axes)<br>
+                    <br>
+                    <i>Example:</i> <b>D₄ₕ</b> has a 4-fold rotation axis, 4 perpendicular 2-fold axes, and a horizontal mirror plane.
+                </div>
+            </div>
+        `;
+        
+        parent.css('position', 'relative');
+        parent.append(glossaryHtml);
+        
+        parent.find('.sym-glossary-icon').hover(
+            function() { $(this).siblings('.sym-glossary-content').stop(true,true).fadeIn(200); },
+            function() { $(this).siblings('.sym-glossary-content').stop(true,true).fadeOut(200); }
+        );
     }
 
     isGammaLabel(label) {
@@ -108524,6 +108681,764 @@ async function solveHermitianEigenSystem(payload, qpoint, qDirection = null) {
     };
 }
 
+class PhononPropertyCalculator {
+    constructor(phononJson) {
+        this.phonon = phononJson;
+    }
+
+    // --- Helper Functions ---
+
+    complexDot(a, b) {
+        let real = 0, imag = 0;
+        for (let i = 0; i < a.length; i++) {
+            let ar = a[i][0], ai = -a[i][1]; // conjugate
+            let br = b[i][0], bi = b[i][1];
+            real += ar * br - ai * bi;
+            imag += ar * bi + ai * br;
+        }
+        return [real, imag];
+    }
+
+    chiralityOprXy(natom, iatom) {
+        let L = Array(natom * 3).fill(0).map(() => [0, 0]);
+        let R = Array(natom * 3).fill(0).map(() => [0, 0]);
+        let val = Math.SQRT2 / 2;
+        L[iatom * 3] = [val, 0];
+        L[iatom * 3 + 1] = [0, -val];
+        R[iatom * 3] = [val, 0];
+        R[iatom * 3 + 1] = [0, val];
+        return { L, R };
+    }
+
+    chiralityOprYz(natom, iatom) {
+        let L = Array(natom * 3).fill(0).map(() => [0, 0]);
+        let R = Array(natom * 3).fill(0).map(() => [0, 0]);
+        let val = Math.SQRT2 / 2;
+        L[iatom * 3 + 1] = [val, 0];
+        L[iatom * 3 + 2] = [0, -val];
+        R[iatom * 3 + 1] = [val, 0];
+        R[iatom * 3 + 2] = [0, val];
+        return { L, R };
+    }
+
+    chiralityOprZx(natom, iatom) {
+        let L = Array(natom * 3).fill(0).map(() => [0, 0]);
+        let R = Array(natom * 3).fill(0).map(() => [0, 0]);
+        let val = Math.SQRT2 / 2;
+        L[iatom * 3 + 2] = [val, 0];
+        L[iatom * 3 + 0] = [0, -val];
+        R[iatom * 3 + 2] = [val, 0];
+        R[iatom * 3 + 0] = [0, val];
+        return { L, R };
+    }
+
+    getRecLat(lat) {
+        let cross = (a, b) => [
+            a[1]*b[2] - a[2]*b[1],
+            a[2]*b[0] - a[0]*b[2],
+            a[0]*b[1] - a[1]*b[0]
+        ];
+        let dot = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+        let a1 = lat[0], a2 = lat[1], a3 = lat[2];
+        let b1 = cross(a2, a3);
+        let b2 = cross(a3, a1);
+        let b3 = cross(a1, a2);
+        let v = dot(a1, b1);
+        return [ b1.map(x => x / v), b2.map(x => x / v), b3.map(x => x / v) ];
+    }
+
+    redCar(vec, lat) {
+        let r = [0, 0, 0];
+        for (let i = 0; i < 3; i++) {
+            r[i] = lat[0][i]*vec[0] + lat[1][i]*vec[1] + lat[2][i]*vec[2];
+        }
+        return r;
+    }
+
+    matMul3x3(A, B) {
+        let C = [[0,0,0], [0,0,0], [0,0,0]];
+        for(let i=0; i<3; i++)
+            for(let j=0; j<3; j++)
+                for(let k=0; k<3; k++)
+                    C[i][j] += A[i][k] * B[k][j];
+        return C;
+    }
+
+    matInv3x3(m) {
+        let det = m[0][0] * (m[1][1] * m[2][2] - m[2][1] * m[1][2]) -
+                  m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
+                  m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+        return [
+            [(m[1][1] * m[2][2] - m[2][1] * m[1][2]) / det, (m[0][2] * m[2][1] - m[0][1] * m[2][2]) / det, (m[0][1] * m[1][2] - m[0][2] * m[1][1]) / det],
+            [(m[1][2] * m[2][0] - m[1][0] * m[2][2]) / det, (m[0][0] * m[2][2] - m[0][2] * m[2][0]) / det, (m[1][0] * m[0][2] - m[0][0] * m[1][2]) / det],
+            [(m[1][0] * m[2][1] - m[2][0] * m[1][1]) / det, (m[2][0] * m[0][1] - m[0][0] * m[2][1]) / det, (m[0][0] * m[1][1] - m[1][0] * m[0][1]) / det]
+        ];
+    }
+
+    getRotationAxisAngle(R_car) {
+        let tr = R_car[0][0] + R_car[1][1] + R_car[2][2];
+        let cos_val = Math.max(-1.0, Math.min(1.0, (tr - 1.0) / 2.0));
+        let angle = Math.acos(cos_val);
+        
+        if (Math.abs(angle) < 1e-5) return { axis: [0, 0, 1], angle: 0.0 };
+        
+        if (Math.abs(angle - Math.PI) < 1e-5) {
+            let R_plus_I = [
+                [R_car[0][0] + 1, R_car[0][1], R_car[0][2]],
+                [R_car[1][0], R_car[1][1] + 1, R_car[1][2]],
+                [R_car[2][0], R_car[2][1], R_car[2][2] + 1]
+            ];
+            for (let i = 0; i < 3; i++) {
+                let col = [R_plus_I[0][i], R_plus_I[1][i], R_plus_I[2][i]];
+                let norm = Math.hypot(...col);
+                if (norm > 1e-5) return { axis: col.map(x => x / norm), angle: Math.PI };
+            }
+        }
+        
+        let axis = [
+            R_car[2][1] - R_car[1][2],
+            R_car[0][2] - R_car[2][0],
+            R_car[1][0] - R_car[0][1]
+        ];
+        let norm = Math.hypot(...axis);
+        return norm > 1e-5 ? { axis: axis.map(x => x / norm), angle } : { axis: [0, 0, 1], angle };
+    }
+
+    buildRepresentationMatrices(cell, q, R, tau) {
+        let lattice = cell[0];
+        let pos_red = cell[1];
+        let natoms = pos_red.length;
+        
+        let A = [
+            [lattice[0][0], lattice[1][0], lattice[2][0]],
+            [lattice[0][1], lattice[1][1], lattice[2][1]],
+            [lattice[0][2], lattice[1][2], lattice[2][2]]
+        ];
+        let A_inv = this.matInv3x3(A);
+        let R_car = this.matMul3x3(A, this.matMul3x3(R, A_inv));
+        
+        let D = Array(3 * natoms).fill(0).map(() => Array(3 * natoms).fill(0).map(() => [0, 0]));
+        
+        for (let i = 0; i < natoms; i++) {
+            let r_prime = [0, 0, 0];
+            for(let x = 0; x < 3; x++) r_prime[x] = R[x][0]*pos_red[i][0] + R[x][1]*pos_red[i][1] + R[x][2]*pos_red[i][2] + tau[x];
+            
+            let min_dist = 1e10, j_best = -1;
+            for (let j = 0; j < natoms; j++) {
+                let diff_mod1 = [
+                    (pos_red[j][0] - r_prime[0]) - Math.round(pos_red[j][0] - r_prime[0]),
+                    (pos_red[j][1] - r_prime[1]) - Math.round(pos_red[j][1] - r_prime[1]),
+                    (pos_red[j][2] - r_prime[2]) - Math.round(pos_red[j][2] - r_prime[2])
+                ];
+                let diff_car = [0, 0, 0];
+                for(let x=0; x<3; x++) diff_car[x] = diff_mod1[0]*lattice[0][x] + diff_mod1[1]*lattice[1][x] + diff_mod1[2]*lattice[2][x];
+                let dist = Math.hypot(...diff_car);
+                if (dist < min_dist) { min_dist = dist; j_best = j; }
+            }
+            
+            if (min_dist > 1e-3) throw new Error("Symmetry mapping failed for atom " + i);
+            
+            let Rq = [
+                R[0][0]*q[0] + R[0][1]*q[1] + R[0][2]*q[2],
+                R[1][0]*q[0] + R[1][1]*q[1] + R[1][2]*q[2],
+                R[2][0]*q[0] + R[2][1]*q[1] + R[2][2]*q[2]
+            ];
+            let G = [Math.round(Rq[0] - q[0]), Math.round(Rq[1] - q[1]), Math.round(Rq[2] - q[2])];
+            
+            let dotG = G[0]*pos_red[j_best][0] + G[1]*pos_red[j_best][1] + G[2]*pos_red[j_best][2];
+            let phase_val = -2.0 * Math.PI * dotG;
+            let phase = [Math.cos(phase_val), Math.sin(phase_val)];
+            
+            for (let r = 0; r < 3; r++) {
+                for (let c = 0; c < 3; c++) {
+                    D[3 * j_best + r][3 * i + c] = [phase[0] * R_car[r][c], phase[1] * R_car[r][c]];
+                }
+            }
+        }
+        return D;
+    }
+
+    greedyAssignment(matrix, maximize = false) {
+        let n = matrix.length;
+        if (n === 0) return [];
+        let m = matrix[0].length;
+        let row_ind = [], col_ind = [];
+        let used_cols = Array(m).fill(false), used_rows = Array(n).fill(false);
+        
+        let elements = [];
+        for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) elements.push({ r: i, c: j, v: matrix[i][j] });
+        elements.sort((a, b) => maximize ? b.v - a.v : a.v - b.v);
+        
+        for (let el of elements) {
+            if (!used_rows[el.r] && !used_cols[el.c]) {
+                row_ind.push(el.r); col_ind.push(el.c);
+                used_rows[el.r] = true; used_cols[el.c] = true;
+            }
+            if (row_ind.length === n) break;
+        }
+        
+        for(let i = 0; i < n; i++) {
+            if (!used_rows[i]) {
+                for(let j = 0; j < m; j++) {
+                    if (!used_cols[j]) {
+                        row_ind.push(i); col_ind.push(j);
+                        used_rows[i] = true; used_cols[j] = true;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        return row_ind.map((r, i) => [r, col_ind[i]]).sort((a, b) => a[0] - b[0]).map(pair => pair[1]);
+    }
+
+    realJacobi(M) {
+        let n = M.length;
+        let V = Array(n).fill(0).map((_, i) => Array(n).fill(0).map((_, j) => i === j ? 1 : 0));
+        let A = JSON.parse(JSON.stringify(M));
+        
+        for (let iter = 0; iter < 100 * n * n; iter++) {
+            let maxVal = 0, p = 0, q = 1;
+            for (let i = 0; i < n; i++) {
+                for (let j = i + 1; j < n; j++) {
+                    if (Math.abs(A[i][j]) > maxVal) { maxVal = Math.abs(A[i][j]); p = i; q = j; }
+                }
+            }
+            if (maxVal < 1e-10) break;
+            
+            let app = A[p][p], aqq = A[q][q], apq = A[p][q];
+            let phi = 0.5 * Math.atan2(2 * apq, app - aqq);
+            let c = Math.cos(phi), s = Math.sin(phi);
+            
+            for (let i = 0; i < n; i++) {
+                if (i !== p && i !== q) {
+                    let aip = A[i][p], aiq = A[i][q];
+                    A[i][p] = A[p][i] = c * aip - s * aiq;
+                    A[i][q] = A[q][i] = s * aip + c * aiq;
+                }
+                let vip = V[i][p], viq = V[i][q];
+                V[i][p] = c * vip - s * viq;
+                V[i][q] = s * vip + c * viq;
+            }
+            A[p][p] = c * c * app + 2 * s * c * apq + s * s * aqq;
+            A[q][q] = s * s * app - 2 * s * c * apq + c * c * aqq;
+            A[p][q] = A[q][p] = 0;
+        }
+        return A.map((row, i) => ({ val: row[i], vec: V.map(vRow => vRow[i]) })).sort((a, b) => b.val - a.val);
+    }
+
+    diagonalizeComplexUnitary(M) {
+        let n = M.length;
+        let R = Array(2 * n).fill(0).map(() => Array(2 * n).fill(0));
+        for (let i = 0; i < n; i++) {
+            for (let j = 0; j < n; j++) {
+                let r = M[i][j][0] + M[j][i][0] - 0.5 * (M[i][j][1] + M[j][i][1]);
+                let im = M[i][j][1] - M[j][i][1] + 0.5 * (M[i][j][0] - M[j][i][0]);
+                R[i][j] = R[i + n][j + n] = r;
+                R[i][j + n] = -im; R[i + n][j] = im;
+            }
+        }
+        let evals = this.realJacobi(R);
+        let evecs = [];
+        for (let k = 0; k < 2 * n; k += 2) {
+            evecs.push(Array.from({length: n}, (_, i) => [evals[k].vec[i], evals[k].vec[i + n]]));
+        }
+        
+        let M_evals = evecs.map(v => {
+            let dotR = 0, dotI = 0;
+            for (let i = 0; i < n; i++) {
+                let mvr = 0, mvi = 0;
+                for (let j = 0; j < n; j++) {
+                    mvr += M[i][j][0]*v[j][0] - M[i][j][1]*v[j][1];
+                    mvi += M[i][j][0]*v[j][1] + M[i][j][1]*v[j][0];
+                }
+                dotR += v[i][0]*mvr + v[i][1]*mvi;
+                dotI += v[i][0]*mvi - v[i][1]*mvr;
+            }
+            return [dotR, dotI];
+        });
+        return { evals: M_evals, evecs };
+    }
+
+    // --- Core API ---
+
+    computeChiralProperties() {
+        if (!this.phonon.vec) return {};
+        
+        let eigs = this.phonon.vec;
+        let nqpoints = eigs.length, nphons = eigs[0].length, natoms = eigs[0][0].length;
+        
+        let angular_momentum = Array(nqpoints).fill(0).map(() => Array(nphons).fill(0).map(() => [0,0,0]));
+        let helicity = Array(nqpoints).fill(0).map(() => Array(nphons).fill(0));
+        let cycloidicity = Array(nqpoints).fill(0).map(() => Array(nphons).fill(0).map(() => [0,0,0,0]));
+        
+        let opr_xy = Array.from({length: natoms}, (_, i) => this.chiralityOprXy(natoms, i));
+        let opr_yz = Array.from({length: natoms}, (_, i) => this.chiralityOprYz(natoms, i));
+        let opr_zx = Array.from({length: natoms}, (_, i) => this.chiralityOprZx(natoms, i));
+        
+        for (let iq = 0; iq < nqpoints; iq++) {
+            for (let ibnd = 0; ibnd < nphons; ibnd++) {
+                let eig_vec = [];
+                for (let iat = 0; iat < natoms; iat++) {
+                    for (let x = 0; x < 3; x++) eig_vec.push(eigs[iq][ibnd][iat][x]);
+                }
+                
+                let cmat = [0, 0, 0];
+                for (let iat = 0; iat < natoms; iat++) {
+                    let Lz = this.complexDot(eig_vec, opr_xy[iat].L), Rz = this.complexDot(eig_vec, opr_xy[iat].R);
+                    cmat[2] += (Rz[0]**2 + Rz[1]**2) - (Lz[0]**2 + Lz[1]**2);
+                    
+                    let Lx = this.complexDot(eig_vec, opr_yz[iat].L), Rx = this.complexDot(eig_vec, opr_yz[iat].R);
+                    cmat[0] += (Rx[0]**2 + Rx[1]**2) - (Lx[0]**2 + Lx[1]**2);
+                    
+                    let Ly = this.complexDot(eig_vec, opr_zx[iat].L), Ry = this.complexDot(eig_vec, opr_zx[iat].R);
+                    cmat[1] += (Ry[0]**2 + Ry[1]**2) - (Ly[0]**2 + Ly[1]**2);
+                }
+                angular_momentum[iq][ibnd] = cmat;
+            }
+        }
+        
+        let rec = this.getRecLat(this.phonon.cell || this.phonon.lat);
+        for (let iq = 0; iq < nqpoints; iq++) {
+            let q_car = this.redCar(this.phonon.kpoints[iq], rec);
+            let q_norm = Math.hypot(...q_car);
+            let q_unit = q_norm > 1e-6 ? q_car.map(x => x / q_norm) : [0,0,0];
+            
+            for (let ibnd = 0; ibnd < nphons; ibnd++) {
+                let J = angular_momentum[iq][ibnd];
+                helicity[iq][ibnd] = J[0]*q_unit[0] + J[1]*q_unit[1] + J[2]*q_unit[2];
+                
+                let C = [
+                    q_unit[1]*J[2] - q_unit[2]*J[1],
+                    q_unit[2]*J[0] - q_unit[0]*J[2],
+                    q_unit[0]*J[1] - q_unit[1]*J[0]
+                ];
+                cycloidicity[iq][ibnd] = [C[0], C[1], C[2], Math.hypot(...C)];
+            }
+        }
+        
+        return {
+            angular_momentum_x: angular_momentum.map(q => q.map(b => b[0])),
+            angular_momentum_y: angular_momentum.map(q => q.map(b => b[1])),
+            angular_momentum_z: angular_momentum.map(q => q.map(b => b[2])),
+            helicity,
+            cycloidicity_x: cycloidicity.map(q => q.map(b => b[0])),
+            cycloidicity_y: cycloidicity.map(q => q.map(b => b[1])),
+            cycloidicity_z: cycloidicity.map(q => q.map(b => b[2]))
+        };
+    }
+
+    computePamProperties() {
+        if (!this.phonon.vec) return {};
+        
+        let eigs = this.phonon.vec;
+        let nqpoints = eigs.length, nphons = eigs[0].length, natoms = eigs[0][0].length;
+        
+        let eigs_flat = eigs.map(q_eigs => q_eigs.map(bnd => {
+            let flat = [];
+            for (let iat = 0; iat < natoms; iat++) for (let x = 0; x < 3; x++) flat.push([...bnd[iat][x]]);
+            return flat;
+        }));
+        
+        let freqs = JSON.parse(JSON.stringify(this.phonon.eigenvalues));
+        let qpoints = this.phonon.kpoints;
+        let lattice = this.phonon.cell || this.phonon.lat;
+        let pos_red = this.phonon.atom_pos_red || this.phonon.atom_pos_car; 
+        let cell = [lattice, pos_red, null];
+        
+        let pam_uncomp = Array(nqpoints).fill(0).map(() => Array(nphons).fill(0));
+        let pam_comp = Array(nqpoints).fill(0).map(() => Array(nphons).fill(0));
+        let eigs_adapted = JSON.parse(JSON.stringify(eigs_flat));
+        
+        let actual_segments = this.phonon.line_breaks || [[0, nqpoints]];
+        let B_rec = this.getRecLat(lattice);
+        let A = [[lattice[0][0], lattice[1][0], lattice[2][0]], [lattice[0][1], lattice[1][1], lattice[2][1]], [lattice[0][2], lattice[1][2], lattice[2][2]]];
+        let A_inv = this.matInv3x3(A);
+        
+        for (let seg_idx = 0; seg_idx < actual_segments.length; seg_idx++) {
+            let start_idx = actual_segments[seg_idx][0], end_idx = actual_segments[seg_idx][1];
+            let lg_ops_segment = (this.phonon.segment_point_groups || [])[seg_idx];
+            if (!lg_ops_segment) continue;
+            
+            let q_start = qpoints[start_idx], q_end = qpoints[Math.min(end_idx, nqpoints - 1)];
+            let dq_car = this.redCar([q_end[0]-q_start[0], q_end[1]-q_start[1], q_end[2]-q_start[2]], B_rec);
+            let norm_dq = Math.hypot(...dq_car);
+            let dir_q_car = norm_dq > 1e-5 ? dq_car.map(x => x / norm_dq) : [0, 0, 1];
+            
+            let best_op = -1, min_angle = 10.0;
+            for (let idx = 0; idx < lg_ops_segment.rotations.length; idx++) {
+                let R = lg_ops_segment.rotations[idx];
+                let det = Math.round(R[0][0]*(R[1][1]*R[2][2]-R[2][1]*R[1][2]) - R[0][1]*(R[1][0]*R[2][2]-R[1][2]*R[2][0]) + R[0][2]*(R[1][0]*R[2][1]-R[1][1]*R[2][0]));
+                if (det > 0) {
+                    let R_car = this.matMul3x3(A, this.matMul3x3(R, A_inv));
+                    let { axis, angle } = this.getRotationAxisAngle(R_car);
+                    if (angle > 1e-3 && Math.abs(Math.abs(axis[0]*dir_q_car[0] + axis[1]*dir_q_car[1] + axis[2]*dir_q_car[2]) - 1.0) < 1e-2) {
+                        if (angle < min_angle) { min_angle = angle; best_op = idx; }
+                    }
+                }
+            }
+            if (best_op === -1) continue;
+            
+            let R_gen = lg_ops_segment.rotations[best_op], tau_gen = lg_ops_segment.translations[best_op];
+            let angle_gen = this.getRotationAxisAngle(this.matMul3x3(A, this.matMul3x3(R_gen, A_inv))).angle;
+            let n_axis = angle_gen > 1e-4 ? Math.round(2.0 * Math.PI / angle_gen) : 1;
+            
+            let t_vec = [0, 0, 0], R_pow = [[1,0,0],[0,1,0],[0,0,1]];
+            for (let i = 0; i < n_axis; i++) {
+                for(let x=0; x<3; x++) t_vec[x] += R_pow[x][0]*tau_gen[0] + R_pow[x][1]*tau_gen[1] + R_pow[x][2]*tau_gen[2];
+                R_pow = this.matMul3x3(R_gen, R_pow);
+            }
+            t_vec = t_vec.map(x => x / n_axis);
+            
+            for (let iq = start_idx; iq < end_idx; iq++) {
+                if (iq >= nqpoints) continue;
+                
+                if (iq > start_idx) {
+                    let overlap = Array(nphons).fill(0).map((_, i) => Array(nphons).fill(0).map((_, j) => {
+                        let dot = this.complexDot(eigs_adapted[iq-1][i], eigs_flat[iq][j]);
+                        return Math.hypot(dot[0], dot[1]);
+                    }));
+                    let col_ind = this.greedyAssignment(overlap, true);
+                    eigs_flat[iq] = col_ind.map(j => eigs_flat[iq][j]);
+                    freqs[iq] = col_ind.map(j => freqs[iq][j]);
+                }
+                
+                let q = qpoints[iq], w = freqs[iq];
+                let D;
+                try { D = this.buildRepresentationMatrices(cell, q, R_gen, tau_gen); } catch(e) { eigs_adapted[iq] = eigs_flat[iq].slice(); continue; }
+                
+                let visited = Array(nphons).fill(false);
+                for (let ibnd = 0; ibnd < nphons; ibnd++) {
+                    if (visited[ibnd]) continue;
+                    let manifold = [];
+                    for (let j = 0; j < nphons; j++) if (Math.abs(w[j] - w[ibnd]) < 1e-5) { manifold.push(j); visited[j] = true; }
+                    
+                    let basis = manifold.map(j => eigs_flat[iq][j]), m_size = manifold.length;
+                    
+                    if (m_size === 1) {
+                        let De = Array(3*natoms).fill(0).map(() => [0, 0]);
+                        for(let a=0; a<3*natoms; a++) for(let b=0; b<3*natoms; b++) {
+                            De[a][0] += D[a][b][0]*basis[0][b][0] - D[a][b][1]*basis[0][b][1];
+                            De[a][1] += D[a][b][0]*basis[0][b][1] + D[a][b][1]*basis[0][b][0];
+                        }
+                        let lambda_D = this.complexDot(basis[0], De);
+                        
+                        pam_uncomp[iq][ibnd] = ((Math.atan2(lambda_D[1], lambda_D[0]) / angle_gen) % n_axis + n_axis) % n_axis;
+                        let dot_qt = q[0]*t_vec[0] + q[1]*t_vec[1] + q[2]*t_vec[2];
+                        let pc = [Math.cos(2*Math.PI*dot_qt), Math.sin(2*Math.PI*dot_qt)];
+                        let ld_comp = [lambda_D[0]*pc[0] - lambda_D[1]*pc[1], lambda_D[0]*pc[1] + lambda_D[1]*pc[0]];
+                        let p_comp = ((Math.atan2(ld_comp[1], ld_comp[0]) / angle_gen) % n_axis + n_axis) % n_axis;
+                        pam_comp[iq][ibnd] = Math.abs(p_comp - Math.round(p_comp)) < 1e-2 ? (Math.round(p_comp) % n_axis + n_axis) % n_axis : p_comp;
+                        eigs_adapted[iq][ibnd] = basis[0];
+                    } else {
+                        let M_D = Array(m_size).fill(0).map((_, a) => Array(m_size).fill(0).map((_, b) => {
+                            let Db = Array(3*natoms).fill(0).map(() => [0, 0]);
+                            for(let r=0; r<3*natoms; r++) for(let c=0; c<3*natoms; c++) {
+                                Db[r][0] += D[r][c][0]*basis[b][c][0] - D[r][c][1]*basis[b][c][1];
+                                Db[r][1] += D[r][c][0]*basis[b][c][1] + D[r][c][1]*basis[b][c][0];
+                            }
+                            return this.complexDot(basis[a], Db);
+                        }));
+                        let { evals: eigvals_D, evecs: eigvecs_D } = this.diagonalizeComplexUnitary(M_D);
+                        
+                        let adapted = eigvecs_D.map(V => {
+                            let mode = Array(3*natoms).fill(0).map(() => [0, 0]);
+                            for(let a=0; a<m_size; a++) for(let c=0; c<3*natoms; c++) {
+                                mode[c][0] += V[a][0]*basis[a][c][0] - V[a][1]*basis[a][c][1];
+                                mode[c][1] += V[a][0]*basis[a][c][1] + V[a][1]*basis[a][c][0];
+                            }
+                            let norm = Math.sqrt(mode.reduce((sum, v) => sum + v[0]**2 + v[1]**2, 0));
+                            return norm > 1e-12 ? mode.map(v => [v[0]/norm, v[1]/norm]) : mode;
+                        });
+                        
+                        let ref_modes = iq > start_idx ? manifold.map(j => eigs_adapted[iq - 1][j]) : basis;
+                        let overlap = adapted.map(a_mode => ref_modes.map(r_mode => {
+                            let dot = this.complexDot(a_mode, r_mode);
+                            return Math.hypot(dot[0], dot[1]);
+                        }));
+                        let match_ind = this.greedyAssignment(overlap, true);
+                        
+                        for (let b_idx = 0; b_idx < m_size; b_idx++) {
+                            let j = manifold[b_idx], m_idx = match_ind.indexOf(b_idx);
+                            pam_uncomp[iq][j] = ((Math.atan2(eigvals_D[m_idx][1], eigvals_D[m_idx][0]) / angle_gen) % n_axis + n_axis) % n_axis;
+                            let dot_qt = q[0]*t_vec[0] + q[1]*t_vec[1] + q[2]*t_vec[2];
+                            let pc = [Math.cos(2*Math.PI*dot_qt), Math.sin(2*Math.PI*dot_qt)];
+                            let ld = eigvals_D[m_idx];
+                            let ld_comp = [ld[0]*pc[0] - ld[1]*pc[1], ld[0]*pc[1] + ld[1]*pc[0]];
+                            let p_comp = ((Math.atan2(ld_comp[1], ld_comp[0]) / angle_gen) % n_axis + n_axis) % n_axis;
+                            pam_comp[iq][j] = Math.abs(p_comp - Math.round(p_comp)) < 1e-2 ? (Math.round(p_comp) % n_axis + n_axis) % n_axis : p_comp;
+                            eigs_adapted[iq][j] = adapted[m_idx];
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Push the tracked eigenvalues and vectors back!
+        this.phonon.eigenvalues = freqs;
+        let eigs_real_imag = Array(nqpoints).fill(0).map((_, iq) => Array(nphons).fill(0).map((_, ibnd) => {
+            let atom_vec = Array(natoms).fill(0).map(() => Array(3).fill(0).map(() => [0, 0]));
+            for (let iat = 0; iat < natoms; iat++) {
+                for (let x = 0; x < 3; x++) {
+                    atom_vec[iat][x] = [...eigs_adapted[iq][ibnd][iat*3 + x]];
+                }
+            }
+            return atom_vec;
+        }));
+        this.phonon.vec = eigs_real_imag;
+        
+        return { pam_total_uncompensated: pam_uncomp, pam_total_compensated: pam_comp };
+    }
+}
+
+async function spglibFactory(moduleArg={}){var Module=moduleArg;var ENVIRONMENT_IS_WEB=!!globalThis.window;var ENVIRONMENT_IS_WORKER=!!globalThis.WorkerGlobalScope;var ENVIRONMENT_IS_NODE=globalThis.process?.versions?.node&&globalThis.process?.type!="renderer";if(ENVIRONMENT_IS_NODE){const{createRequire}=await import('node:module');var require=createRequire(import.meta.url);}var thisProgram="./this.program";var _scriptName=import.meta.url;var scriptDirectory="";function locateFile(path){if(Module["locateFile"]){return Module["locateFile"](path,scriptDirectory)}return scriptDirectory+path}var readAsync,readBinary;if(ENVIRONMENT_IS_NODE){var fs=require("node:fs");if(_scriptName.startsWith("file:")){scriptDirectory=require("node:path").dirname(require("node:url").fileURLToPath(_scriptName))+"/";}readBinary=filename=>{filename=isFileURI(filename)?new URL(filename):filename;var ret=fs.readFileSync(filename);return ret};readAsync=async(filename,binary=true)=>{filename=isFileURI(filename)?new URL(filename):filename;var ret=fs.readFileSync(filename,binary?undefined:"utf8");return ret};if(process.argv.length>1){thisProgram=process.argv[1].replace(/\\/g,"/");}process.argv.slice(2);}else if(ENVIRONMENT_IS_WEB||ENVIRONMENT_IS_WORKER){try{scriptDirectory=new URL(".",_scriptName).href;}catch{}{if(ENVIRONMENT_IS_WORKER){readBinary=url=>{var xhr=new XMLHttpRequest;xhr.open("GET",url,false);xhr.responseType="arraybuffer";xhr.send(null);return new Uint8Array(xhr.response)};}readAsync=async url=>{if(isFileURI(url)){return new Promise((resolve,reject)=>{var xhr=new XMLHttpRequest;xhr.open("GET",url,true);xhr.responseType="arraybuffer";xhr.onload=()=>{if(xhr.status==200||xhr.status==0&&xhr.response){resolve(xhr.response);return}reject(xhr.status);};xhr.onerror=reject;xhr.send(null);})}var response=await fetch(url,{credentials:"same-origin"});if(response.ok){return response.arrayBuffer()}throw new Error(response.status+" : "+response.url)};}}else;var out=console.log.bind(console);var err=console.error.bind(console);var wasmBinary;var ABORT=false;var isFileURI=filename=>filename.startsWith("file://");function updateMemoryViews(){var b=wasmMemory.buffer;HEAP8=new Int8Array(b);HEAPU8=new Uint8Array(b);Module["HEAP32"]=new Int32Array(b);HEAPU32=new Uint32Array(b);Module["HEAPF64"]=new Float64Array(b);new BigInt64Array(b);new BigUint64Array(b);}function preRun(){if(Module["preRun"]){if(typeof Module["preRun"]=="function")Module["preRun"]=[Module["preRun"]];while(Module["preRun"].length){addOnPreRun(Module["preRun"].shift());}}callRuntimeCallbacks(onPreRuns);}function initRuntime(){wasmExports["h"]();}function postRun(){if(Module["postRun"]){if(typeof Module["postRun"]=="function")Module["postRun"]=[Module["postRun"]];while(Module["postRun"].length){addOnPostRun(Module["postRun"].shift());}}callRuntimeCallbacks(onPostRuns);}function abort(what){Module["onAbort"]?.(what);what=`Aborted(${what})`;err(what);ABORT=true;what+=". Build with -sASSERTIONS for more info.";var e=new WebAssembly.RuntimeError(what);throw e}var wasmBinaryFile;function findWasmBinary(){if(Module["locateFile"]){return locateFile("spglib.wasm")}return new URL("spglib.wasm",import.meta.url).href}function getBinarySync(file){if(file==wasmBinaryFile&&wasmBinary){return new Uint8Array(wasmBinary)}if(readBinary){return readBinary(file)}throw "both async and sync fetching of the wasm failed"}async function getWasmBinary(binaryFile){if(!wasmBinary){try{var response=await readAsync(binaryFile);return new Uint8Array(response)}catch{}}return getBinarySync(binaryFile)}async function instantiateArrayBuffer(binaryFile,imports){try{var binary=await getWasmBinary(binaryFile);var instance=await WebAssembly.instantiate(binary,imports);return instance}catch(reason){err(`failed to asynchronously prepare wasm: ${reason}`);abort(reason);}}async function instantiateAsync(binary,binaryFile,imports){if(!binary&&!isFileURI(binaryFile)&&!ENVIRONMENT_IS_NODE){try{var response=fetch(binaryFile,{credentials:"same-origin"});var instantiationResult=await WebAssembly.instantiateStreaming(response,imports);return instantiationResult}catch(reason){err(`wasm streaming compile failed: ${reason}`);err("falling back to ArrayBuffer instantiation");}}return instantiateArrayBuffer(binaryFile,imports)}function getWasmImports(){var imports={a:wasmImports};return imports}async function createWasm(){function receiveInstance(instance,module){wasmExports=instance.exports;assignWasmExports(wasmExports);updateMemoryViews();return wasmExports}function receiveInstantiationResult(result){return receiveInstance(result["instance"])}var info=getWasmImports();if(Module["instantiateWasm"]){return new Promise((resolve,reject)=>{Module["instantiateWasm"](info,(inst,mod)=>{resolve(receiveInstance(inst));});})}wasmBinaryFile??=findWasmBinary();var result=await instantiateAsync(wasmBinary,wasmBinaryFile,info);var exports=receiveInstantiationResult(result);return exports}var HEAP8;var HEAPU32;var HEAPU8;var callRuntimeCallbacks=callbacks=>{while(callbacks.length>0){callbacks.shift()(Module);}};var onPostRuns=[];var addOnPostRun=cb=>onPostRuns.push(cb);var onPreRuns=[];var addOnPreRun=cb=>onPreRuns.push(cb);var stackRestore=val=>__emscripten_stack_restore(val);var stackSave=()=>_emscripten_stack_get_current();var UTF8Decoder=globalThis.TextDecoder&&new TextDecoder;var findStringEnd=(heapOrArray,idx,maxBytesToRead,ignoreNul)=>{var maxIdx=idx+maxBytesToRead;if(ignoreNul)return maxIdx;while(heapOrArray[idx]&&!(idx>=maxIdx))++idx;return idx};var UTF8ArrayToString=(heapOrArray,idx=0,maxBytesToRead,ignoreNul)=>{var endPtr=findStringEnd(heapOrArray,idx,maxBytesToRead,ignoreNul);if(endPtr-idx>16&&heapOrArray.buffer&&UTF8Decoder){return UTF8Decoder.decode(heapOrArray.subarray(idx,endPtr))}var str="";while(idx<endPtr){var u0=heapOrArray[idx++];if(!(u0&128)){str+=String.fromCharCode(u0);continue}var u1=heapOrArray[idx++]&63;if((u0&224)==192){str+=String.fromCharCode((u0&31)<<6|u1);continue}var u2=heapOrArray[idx++]&63;if((u0&240)==224){u0=(u0&15)<<12|u1<<6|u2;}else {u0=(u0&7)<<18|u1<<12|u2<<6|heapOrArray[idx++]&63;}if(u0<65536){str+=String.fromCharCode(u0);}else {var ch=u0-65536;str+=String.fromCharCode(55296|ch>>10,56320|ch&1023);}}return str};var UTF8ToString=(ptr,maxBytesToRead,ignoreNul)=>ptr?UTF8ArrayToString(HEAPU8,ptr,maxBytesToRead,ignoreNul):"";var ___assert_fail=(condition,filename,line,func)=>abort(`Assertion failed: ${UTF8ToString(condition)}, at: `+[filename?UTF8ToString(filename):"unknown filename",line,func?UTF8ToString(func):"unknown function"]);var abortOnCannotGrowMemory=requestedSize=>{abort("OOM");};var _emscripten_resize_heap=requestedSize=>{HEAPU8.length;abortOnCannotGrowMemory();};var ENV={};var getExecutableName=()=>thisProgram;var getEnvStrings=()=>{if(!getEnvStrings.strings){var lang=(globalThis.navigator?.language??"C").replace("-","_")+".UTF-8";var env={USER:"web_user",LOGNAME:"web_user",PATH:"/",PWD:"/",HOME:"/home/web_user",LANG:lang,_:getExecutableName()};for(var x in ENV){if(ENV[x]===undefined)delete env[x];else env[x]=ENV[x];}var strings=[];for(var x in env){strings.push(`${x}=${env[x]}`);}getEnvStrings.strings=strings;}return getEnvStrings.strings};var stringToUTF8Array=(str,heap,outIdx,maxBytesToWrite)=>{if(!(maxBytesToWrite>0))return 0;var startIdx=outIdx;var endIdx=outIdx+maxBytesToWrite-1;for(var i=0;i<str.length;++i){var u=str.codePointAt(i);if(u<=127){if(outIdx>=endIdx)break;heap[outIdx++]=u;}else if(u<=2047){if(outIdx+1>=endIdx)break;heap[outIdx++]=192|u>>6;heap[outIdx++]=128|u&63;}else if(u<=65535){if(outIdx+2>=endIdx)break;heap[outIdx++]=224|u>>12;heap[outIdx++]=128|u>>6&63;heap[outIdx++]=128|u&63;}else {if(outIdx+3>=endIdx)break;heap[outIdx++]=240|u>>18;heap[outIdx++]=128|u>>12&63;heap[outIdx++]=128|u>>6&63;heap[outIdx++]=128|u&63;i++;}}heap[outIdx]=0;return outIdx-startIdx};var stringToUTF8=(str,outPtr,maxBytesToWrite)=>stringToUTF8Array(str,HEAPU8,outPtr,maxBytesToWrite);var _environ_get=(__environ,environ_buf)=>{var bufSize=0;var envp=0;for(var string of getEnvStrings()){var ptr=environ_buf+bufSize;HEAPU32[__environ+envp>>2]=ptr;bufSize+=stringToUTF8(string,ptr,Infinity)+1;envp+=4;}return 0};var lengthBytesUTF8=str=>{var len=0;for(var i=0;i<str.length;++i){var c=str.charCodeAt(i);if(c<=127){len++;}else if(c<=2047){len+=2;}else if(c>=55296&&c<=57343){len+=4;++i;}else {len+=3;}}return len};var _environ_sizes_get=(penviron_count,penviron_buf_size)=>{var strings=getEnvStrings();HEAPU32[penviron_count>>2]=strings.length;var bufSize=0;for(var string of strings){bufSize+=lengthBytesUTF8(string)+1;}HEAPU32[penviron_buf_size>>2]=bufSize;return 0};var _fd_close=fd=>52;var printCharBuffers=[null,[],[]];var printChar=(stream,curr)=>{var buffer=printCharBuffers[stream];if(curr===0||curr===10){(stream===1?out:err)(UTF8ArrayToString(buffer));buffer.length=0;}else {buffer.push(curr);}};var _fd_write=(fd,iov,iovcnt,pnum)=>{var num=0;for(var i=0;i<iovcnt;i++){var ptr=HEAPU32[iov>>2];var len=HEAPU32[iov+4>>2];iov+=8;for(var j=0;j<len;j++){printChar(fd,HEAPU8[ptr+j]);}num+=len;}HEAPU32[pnum>>2]=num;return 0};var getCFunc=ident=>{var func=Module["_"+ident];return func};var writeArrayToMemory=(array,buffer)=>{HEAP8.set(array,buffer);};var stackAlloc=sz=>__emscripten_stack_alloc(sz);var stringToUTF8OnStack=str=>{var size=lengthBytesUTF8(str)+1;var ret=stackAlloc(size);stringToUTF8(str,ret,size);return ret};var ccall=(ident,returnType,argTypes,args,opts)=>{var toC={string:str=>{var ret=0;if(str!==null&&str!==undefined&&str!==0){ret=stringToUTF8OnStack(str);}return ret},array:arr=>{var ret=stackAlloc(arr.length);writeArrayToMemory(arr,ret);return ret}};function convertReturnValue(ret){if(returnType==="string"){return UTF8ToString(ret)}if(returnType==="boolean")return Boolean(ret);return ret}var func=getCFunc(ident);var cArgs=[];var stack=0;if(args){for(var i=0;i<args.length;i++){var converter=toC[argTypes[i]];if(converter){if(stack===0)stack=stackSave();cArgs[i]=converter(args[i]);}else {cArgs[i]=args[i];}}}var ret=func(...cArgs);function onDone(ret){if(stack!==0)stackRestore(stack);return convertReturnValue(ret)}ret=onDone(ret);return ret};var cwrap=(ident,returnType,argTypes,opts)=>{var numericArgs=!argTypes||argTypes.every(type=>type==="number"||type==="boolean");var numericRet=returnType!=="string";if(numericRet&&numericArgs&&!opts){return getCFunc(ident)}return (...args)=>ccall(ident,returnType,argTypes,args)};{if(Module["noExitRuntime"])Module["noExitRuntime"];if(Module["print"])out=Module["print"];if(Module["printErr"])err=Module["printErr"];if(Module["wasmBinary"])wasmBinary=Module["wasmBinary"];if(Module["arguments"])Module["arguments"];if(Module["thisProgram"])thisProgram=Module["thisProgram"];if(Module["preInit"]){if(typeof Module["preInit"]=="function")Module["preInit"]=[Module["preInit"]];while(Module["preInit"].length>0){Module["preInit"].shift()();}}}Module["ccall"]=ccall;Module["cwrap"]=cwrap;var __emscripten_stack_restore,__emscripten_stack_alloc,_emscripten_stack_get_current,wasmMemory;function assignWasmExports(wasmExports){Module["_get_symmetry"]=wasmExports["i"];Module["_malloc"]=wasmExports["j"];Module["_free"]=wasmExports["k"];__emscripten_stack_restore=wasmExports["l"];__emscripten_stack_alloc=wasmExports["m"];_emscripten_stack_get_current=wasmExports["n"];wasmMemory=wasmExports["g"];wasmExports["__indirect_function_table"];}var wasmImports={a:___assert_fail,c:_emscripten_resize_heap,e:_environ_get,f:_environ_sizes_get,d:_fd_close,b:_fd_write};async function run(){preRun();var setStatus=Module["setStatus"];if(setStatus){setStatus("Running...");await new Promise(resolve=>setTimeout(resolve,1));setTimeout(setStatus,1,"");}if(ABORT)return;initRuntime();Module["onRuntimeInitialized"]?.();postRun();}var wasmExports;wasmExports=await createWasm();await run();
+return Module}
+
+let spglibInstance = null;
+let spglibPromise = null;
+
+async function initSpglib() {
+    if (spglibInstance) return spglibInstance;
+    if (!spglibPromise) {
+        spglibPromise = spglibFactory();
+    }
+    spglibInstance = await spglibPromise;
+    return spglibInstance;
+}
+
+async function computeSymmetry(phonon) {
+    let spglib = await initSpglib();
+    
+    let lat = phonon.lat; // 3x3 array [ [a1,a2,a3], [b1,b2,b3], [c1,c2,c3] ]
+    let pos = phonon.atom_pos_red; // Nx3 array
+    let types = phonon.atomic_numbers || phonon.atom_numbers; // array of N ints
+    let num_atom = pos.length;
+    let symprec = 1e-4; // Increased tolerance for detecting symmetries (useful in case of relaxed lattice structures)
+    
+    let lat_ptr = spglib._malloc(9 * 8);
+    let pos_ptr = spglib._malloc(3 * num_atom * 8);
+    let typ_ptr = spglib._malloc(num_atom * 4);
+    
+    let rot_ptr = spglib._malloc(192 * 9 * 4);
+    let trans_ptr = spglib._malloc(192 * 3 * 8);
+    
+    let flat_lat = new Float64Array(9);
+    for (let i=0; i<3; i++) {
+        for (let j=0; j<3; j++) {
+            flat_lat[i*3 + j] = lat[i][j];
+        }
+    }
+    
+    let flat_pos = new Float64Array(num_atom * 3);
+    for (let i=0; i<num_atom; i++) {
+        for (let j=0; j<3; j++) {
+            flat_pos[i*3 + j] = pos[i][j];
+        }
+    }
+    
+    let flat_types = new Int32Array(num_atom);
+    for (let i=0; i<num_atom; i++) {
+        flat_types[i] = types[i];
+    }
+    
+    spglib.HEAPF64.set(flat_lat, lat_ptr / 8);
+    spglib.HEAPF64.set(flat_pos, pos_ptr / 8);
+    spglib.HEAP32.set(flat_types, typ_ptr / 4);
+    
+    let num_sym = spglib.ccall(
+        'get_symmetry',
+        'number',
+        ['number', 'number', 'number', 'number', 'number', 'number', 'number'],
+        [lat_ptr, pos_ptr, typ_ptr, num_atom, symprec, rot_ptr, trans_ptr]
+    );
+    
+    let rotations = [];
+    let translations = [];
+    
+    let rot_out = new Int32Array(spglib.HEAP32.buffer, rot_ptr, num_sym * 9);
+    let trans_out = new Float64Array(spglib.HEAPF64.buffer, trans_ptr, num_sym * 3);
+    
+    for (let i=0; i<num_sym; i++) {
+        let R = [
+            [rot_out[i*9 + 0], rot_out[i*9 + 1], rot_out[i*9 + 2]],
+            [rot_out[i*9 + 3], rot_out[i*9 + 4], rot_out[i*9 + 5]],
+            [rot_out[i*9 + 6], rot_out[i*9 + 7], rot_out[i*9 + 8]]
+        ];
+        let t = [trans_out[i*3 + 0], trans_out[i*3 + 1], trans_out[i*3 + 2]];
+        rotations.push(R);
+        translations.push(t);
+    }
+    
+    spglib._free(lat_ptr);
+    spglib._free(pos_ptr);
+    spglib._free(typ_ptr);
+    spglib._free(rot_ptr);
+    spglib._free(trans_ptr);
+    
+    // Now we must find the little group for each segment!
+    let segment_point_groups = [];
+    let line_breaks = phonon.line_breaks || [[0, phonon.kpoints.length]];
+    
+    for (let i=0; i<line_breaks.length; i++) {
+        let start = line_breaks[i][0];
+        let end = line_breaks[i][1];
+        if (start === undefined || end === undefined) continue;
+        
+        // Find segment little group from midpoint
+        let mid_idx = Math.floor((start + end) / 2);
+        if (mid_idx === start && end > start) {
+            mid_idx = start + 1; // force it to be inside the segment
+        }
+        if (mid_idx >= phonon.kpoints.length) mid_idx = phonon.kpoints.length - 1;
+        
+        let q_mid = phonon.kpoints[mid_idx];
+        
+        let lg_rotations = [];
+        let lg_translations = [];
+        
+        for (let op=0; op<rotations.length; op++) {
+            let R = rotations[op];
+            
+            // R_q = (R^-1)^T
+            let R_inv = matrix_inverse(R);
+            if (!R_inv) continue;
+            let R_q = matrix_transpose(R_inv);
+            
+            // q_rot = R_q * q
+            let q_rot = [
+                R_q[0][0]*q_mid[0] + R_q[0][1]*q_mid[1] + R_q[0][2]*q_mid[2],
+                R_q[1][0]*q_mid[0] + R_q[1][1]*q_mid[1] + R_q[1][2]*q_mid[2],
+                R_q[2][0]*q_mid[0] + R_q[2][1]*q_mid[1] + R_q[2][2]*q_mid[2]
+            ];
+            
+            // diff = q_rot - q
+            let diff = [
+                q_rot[0] - q_mid[0],
+                q_rot[1] - q_mid[1],
+                q_rot[2] - q_mid[2]
+            ];
+            
+            // is integer?
+            let is_int = (Math.abs(diff[0] - Math.round(diff[0])) < symprec) &&
+                         (Math.abs(diff[1] - Math.round(diff[1])) < symprec) &&
+                         (Math.abs(diff[2] - Math.round(diff[2])) < symprec);
+                         
+            if (is_int) {
+                lg_rotations.push(R);
+                lg_translations.push(translations[op]);
+            }
+        }
+        
+        segment_point_groups.push({
+            start: phonon.distances[start],
+            end: phonon.distances[end-1],
+            rotations: lg_rotations,
+            translations: lg_translations,
+            point_group: identifyPointGroupSymbol(lg_rotations)
+        });
+    }
+    
+    phonon.segment_point_group_list = segment_point_groups;
+    phonon.segment_point_groups = segment_point_groups; // for PhononPropertyCalculator
+    
+    // Now compute the point group for each high-symmetry point
+    let highsym_point_group_map = {};
+    if (phonon.highsym_qpts && phonon.qindex) {
+        for (let dist in phonon.highsym_qpts) {
+            let q_idx = phonon.qindex[dist];
+            if (q_idx === undefined) continue;
+            let q = phonon.kpoints[q_idx];
+            
+            let lg_rotations = [];
+            for (let op=0; op<rotations.length; op++) {
+                let R = rotations[op];
+                let R_inv = matrix_inverse(R);
+                if (!R_inv) continue;
+                let R_q = matrix_transpose(R_inv);
+                let q_rot = [
+                    R_q[0][0]*q[0] + R_q[0][1]*q[1] + R_q[0][2]*q[2],
+                    R_q[1][0]*q[0] + R_q[1][1]*q[1] + R_q[1][2]*q[2],
+                    R_q[2][0]*q[0] + R_q[2][1]*q[1] + R_q[2][2]*q[2]
+                ];
+                let diff = [ q_rot[0] - q[0], q_rot[1] - q[1], q_rot[2] - q[2] ];
+                let is_int = (Math.abs(diff[0] - Math.round(diff[0])) < symprec) &&
+                             (Math.abs(diff[1] - Math.round(diff[1])) < symprec) &&
+                             (Math.abs(diff[2] - Math.round(diff[2])) < symprec);
+                if (is_int) lg_rotations.push(R);
+            }
+            highsym_point_group_map[dist] = identifyPointGroupSymbol(lg_rotations);
+        }
+    }
+    phonon.highsym_point_group_map = highsym_point_group_map;
+    
+    // Store full crystal operations for future 3D animations
+    phonon.crystal_symmetries = {
+        rotations: rotations,
+        translations: translations
+    };
+}
+
+function identifyPointGroupSymbol(rotations) {
+    let counts = { E:0, C2:0, C3:0, C4:0, C6:0, i:0, m:0, S3:0, S4:0, S6:0 };
+    for (let R of rotations) {
+        let det = Math.round(R[0][0]*(R[1][1]*R[2][2]-R[2][1]*R[1][2]) - R[0][1]*(R[1][0]*R[2][2]-R[1][2]*R[2][0]) + R[0][2]*(R[1][0]*R[2][1]-R[1][1]*R[2][0]));
+        let tr = Math.round(R[0][0] + R[1][1] + R[2][2]);
+        
+        if (det === 1) {
+            if (tr === 3) counts.E++;
+            else if (tr === -1) counts.C2++;
+            else if (tr === 0) counts.C3++;
+            else if (tr === 1) counts.C4++;
+            else if (tr === 2) counts.C6++;
+        } else if (det === -1) {
+            if (tr === -3) counts.i++;
+            else if (tr === 1) counts.m++;
+            else if (tr === -2) counts.S3++;
+            else if (tr === -1) counts.S4++;
+            else if (tr === 0) counts.S6++;
+        }
+    }
+    
+    const sig = `${counts.E},${counts.C2},${counts.C3},${counts.C4},${counts.C6},${counts.i},${counts.m},${counts.S3},${counts.S4},${counts.S6}`;
+    
+    const groups = {
+        "1,0,0,0,0,0,0,0,0,0": "C1",
+        "1,0,0,0,0,1,0,0,0,0": "Ci",
+        "1,0,0,0,0,0,1,0,0,0": "Cs",
+        "1,1,0,0,0,0,0,0,0,0": "C2",
+        "1,0,2,0,0,0,0,0,0,0": "C3",
+        "1,1,0,2,0,0,0,0,0,0": "C4",
+        "1,1,0,0,0,0,0,0,2,0": "S4",
+        "1,1,2,0,2,0,0,0,0,0": "C6",
+        "1,0,2,0,0,0,1,2,0,0": "C3h",
+        "1,0,2,0,0,1,0,0,0,2": "S6",
+        "1,1,0,0,0,1,1,0,0,0": "C2h",
+        "1,3,0,0,0,0,0,0,0,0": "D2",
+        "1,1,0,0,0,0,2,0,0,0": "C2v",
+        "1,1,0,2,0,1,1,0,2,0": "C4h",
+        "1,5,0,2,0,0,0,0,0,0": "D4",
+        "1,1,0,2,0,0,4,0,0,0": "C4v",
+        "1,3,0,0,0,0,2,0,2,0": "D2d",
+        "1,3,0,0,0,1,3,0,0,0": "D2h",
+        "1,1,2,0,2,1,1,2,0,2": "C6h",
+        "1,7,2,0,2,0,0,0,0,0": "D6",
+        "1,1,2,0,2,0,6,0,0,0": "C6v",
+        "1,3,2,0,0,0,4,2,0,0": "D3h",
+        "1,3,2,0,0,1,3,0,0,2": "D3d",
+        "1,3,2,0,0,0,0,0,0,0": "D3",
+        "1,0,2,0,0,0,3,0,0,0": "C3v",
+        "1,3,8,0,0,0,0,0,0,0": "T",
+        "1,3,8,0,0,1,3,0,0,8": "Th",
+        "1,9,8,6,0,0,0,0,0,0": "O",
+        "1,3,8,0,0,0,6,0,6,0": "Td",
+        "1,5,0,2,0,1,5,0,2,0": "D4h",
+        "1,7,2,0,2,1,7,2,0,2": "D6h",
+        "1,9,8,6,0,1,9,0,6,8": "Oh"
+    };
+    
+    return groups[sig] || "C1"; // fallback to C1 if somehow signature doesn't match
+}
+
 var thz2cm1 = 33.35641;
 
 class PhononJson {
@@ -109307,21 +110222,44 @@ class PhononJson {
                 this.segment_point_group_list.push({
                     start: startDist,
                     end: endDist,
-                    point_group: seg["point_group"]
+                    point_group: seg["point_group"],
+                    rotations: seg["rotations"],
+                    translations: seg["translations"]
                 });
             }
         }
+        
+        // Also map it to this.segment_point_groups for the calculator
+        this.segment_point_groups = data["segment_point_groups"];
 
         //get line breaks
         this.getLineBreaks(data);
 
-        let finalize = function() {
+        let finalize = async () => {
             if (this.vec) {
                 this.normalizeEigenvectors();
+                
+                // Compute on the fly if needed
+                if (!this.pam_total_compensated) {
+                    try {
+                        if (!this.segment_point_groups || this.segment_point_groups.length === 0) {
+                            await computeSymmetry(this);
+                        }
+                        
+                        let calc = new PhononPropertyCalculator(this);
+                        let chiral = calc.computeChiralProperties();
+                        Object.assign(this, chiral);
+                        
+                        let pam = calc.computePamProperties();
+                        Object.assign(this, pam);
+                    } catch (e) {
+                        console.error("Failed to compute properties on the fly:", e);
+                    }
+                }
             }
             this.invalidateEigenvectorCaches();
             callback();
-        }.bind(this);
+        };
 
         if (this.canComputeEigenvectorsOnDemand() && this.vec && this.vec.length && !this.vec[0]) {
             this.computeAllRuntimeEigenvectorsWithBandConnectionAsync(function(progress) {
@@ -109381,7 +110319,7 @@ class PhononJson {
         let structure = data["structure"];
         this.lat = structure["lattice"]["matrix"];
         let rlat = rec_lat(this.lat);
-        this.repetitions = [3,3,3];
+        this.repetitions = null;
 
         this.atom_pos_car = [];
         this.atom_pos_red = [];
@@ -109506,7 +110444,7 @@ class PhononJson {
         //lattice
         this.lat = structure["lattice"]["matrix"];
         let rlat = rec_lat(this.lat);
-        this.repetitions = [3,3,3];
+        this.repetitions = null;
 
         this.atom_pos_car = [];
         this.atom_pos_red = [];
@@ -110397,7 +111335,7 @@ class PhononWebpage {
                 '#8751b4', // 2.5: Soft Purple
                 '#c63f3f', // 3.0: Soft Red
                 '#876c87', // 3.5: Soft Mauve
-                '#00384e', // 4.0: Soft Cyan)
+                '#909090', // 4.0: Gray (was Soft Cyan)
                 '#5a87b4', // 4.5: Soft Blue
                 '#b448b4', // 5.0: Soft Magenta
                 '#756cc6', // 5.5: Soft Periwinkle
@@ -110654,11 +111592,25 @@ class PhononWebpage {
         /*
         Fuunction to be called once the file is loaded
         */
+        if (typeof this.onMaterialChanged === 'function') {
+            this.onMaterialChanged();
+        }
         this.name = format_formula_html(this.phonon.name);
         if (this.visualizer) {
             this.visualizer.modeScaleAutoInitialized = false;
         }
-        this.setRepetitions(this.phonon.repetitions);
+        if (this.phonon.repetitions) {
+            this.setRepetitions(this.phonon.repetitions);
+        } else {
+            let n = this.phonon.natoms;
+            if (n > 20) {
+                this.setRepetitions([1,1,1]);
+            } else if (n > 10) {
+                this.setRepetitions([2,2,2]);
+            } else {
+                this.setRepetitions([3,3,3]);
+            }
+        }
         this.updateModeSelectionInputs();
         if (!this.enforceVisualizationLimits(true)) {
             return;
@@ -110696,9 +111648,20 @@ class PhononWebpage {
         let apc = this.phonon.atom_pos_car;
         let atoms = [];
 
-        for (let ix=0;ix<nx;ix++) {
-            for (let iy=0;iy<ny;iy++) {
-                for (let iz=0;iz<nz;iz++) {
+        let nx_int = parseInt(nx);
+        let ny_int = parseInt(ny);
+        let nz_int = parseInt(nz);
+
+        let ix_start = -Math.floor(nx_int/2);
+        let ix_end = ix_start + nx_int;
+        let iy_start = -Math.floor(ny_int/2);
+        let iy_end = iy_start + ny_int;
+        let iz_start = -Math.floor(nz_int/2);
+        let iz_end = iz_start + nz_int;
+
+        for (let ix=ix_start; ix<ix_end; ix++) {
+            for (let iy=iy_start; iy<iy_end; iy++) {
+                for (let iz=iz_start; iz<iz_end; iz++) {
                     for (let i=0;i<this.phonon.natoms;i++) {
 
                         //postions of the atoms
@@ -110762,9 +111725,20 @@ class PhononWebpage {
             }
         }
 
-        for (let ix=0; ix<nx; ix++) {
-            for (let iy=0; iy<ny; iy++) {
-                for (let iz=0; iz<nz; iz++) {
+        let nx_int = parseInt(nx);
+        let ny_int = parseInt(ny);
+        let nz_int = parseInt(nz);
+
+        let ix_start = -Math.floor(nx_int/2);
+        let ix_end = ix_start + nx_int;
+        let iy_start = -Math.floor(ny_int/2);
+        let iy_end = iy_start + ny_int;
+        let iz_start = -Math.floor(nz_int/2);
+        let iz_end = iz_start + nz_int;
+
+        for (let ix=ix_start; ix<ix_end; ix++) {
+            for (let iy=iy_start; iy<iy_end; iy++) {
+                for (let iz=iz_start; iz<iz_end; iz++) {
 
                     for (let i=0; i<phonon.natoms; i++) {
                         let sprod = vec_dot(kpt,[ix,iy,iz]) + atom_phase[i];
@@ -110834,7 +111808,7 @@ class PhononWebpage {
         this.dom_n.attr('step', 1);
         this.dom_n.val(this.getEnergyOrderFromBandIndex(this.k, this.n) + 1);
         
-        // Highlight inputs briefly : When you click a point on the graph, the application figures out which q-point and band you clicked, updates the 3D visualizer to animate that exact state, and then uses this code to quickly flash the q-point and mode boxes blue. This visual cue helps the user understand that clicking the graph has automatically updated the controls for the 3D model.
+        // Highlight inputs briefly
         let highlightStyle = 'box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.4); border-color: #0284c7; transition: all 0.3s;';
         let normalStyle = 'transition: all 0.5s;';
         this.dom_k.attr('style', highlightStyle);
@@ -110842,7 +111816,7 @@ class PhononWebpage {
         setTimeout(() => {
             if (this.dom_k) this.dom_k.attr('style', normalStyle);
             if (this.dom_n) this.dom_n.attr('style', normalStyle);
-        }, 1000);
+        }, 600);
     }
 
     selectModeByBandIndex(k, n, syncChart=true) {
@@ -111025,7 +111999,7 @@ class PhononWebpage {
         } else {
             this.dispersion.update(this.phonon, this.getDispersionOptions());
         }
-        //re-select the point after any appearance refresh only, if property changes this ensures the selected point is still selected
+        // ADD THIS — re-select the point after any appearance refresh
         if (this.dispersion.selectModePoint) {
             this.dispersion.selectModePoint(this.phonon, this.k, this.n);
         }
@@ -111336,6 +112310,908 @@ class PhononWebpage {
 
 }
 
+/**
+ * SymmetryVisualizer — Animates crystallographic symmetry operations
+ * on the main VibCrystal viewer.
+ *
+ * Architecture:
+ *   - Reads raw fractional symmetry operations from phonon.crystal_symmetries
+ *   - Converts them to Cartesian space using the lattice vectors
+ *   - Applies Gram-Schmidt to guarantee orthonormality (avoids NaN crashes)
+ *   - Extracts axis + angle, uses SLERP for smooth rotation animation
+ *   - Creates a semi-transparent "ghost" lattice as a visual reference
+ *   - Drives the animation via a 0→1 slider value
+ */
+
+class SymmetryVisualizer {
+
+    constructor(vibcrystal) {
+        /** @type {VibCrystal} */
+        this.crystal = vibcrystal;
+        this.phonon = null;
+
+        // State
+        this.active = false;
+        this.currentOpIndex = -1;
+        this.sliderRotValue = 0.0;
+        this.sliderTransValue = 0.0;
+
+        // Ghost lattice meshes (THREE objects added to scene)
+        this.ghostMeshes = [];
+
+        // Saved state to restore on deactivation
+        this.savedAmplitude = 0;
+        this.savedPaused = false;
+
+        // Precomputed Cartesian operations
+        this.cartesianOps = []; // [{ R_cart, t_cart, axis, angle, det, label }]
+
+        // DOM references (set externally)
+        this.dropdownEl = null;
+        this.sliderRotEl = null;
+        this.sliderTransEl = null;
+        this.sliderRotContainer = null;
+        this.sliderTransContainer = null;
+        this.sliderRotLabel = null;
+        this.panelEl = null;
+        this.labelEl = null;
+        this.toggleBtn = null;
+        this.bondsCheckboxEl = null;
+
+        // Hook into structure updates (e.g. changing cell repetitions)
+        this.crystal.onStructureRebuilt = () => this.refreshGhostLattice();
+    }
+
+    // ─────────────────────────────────────────────
+    // DOM BINDING
+    // ─────────────────────────────────────────────
+
+    bindDOM(panelEl, dropdownEl, sliderRotEl, sliderTransEl, rotContainer, transContainer, rotLabel, labelEl, toggleBtn, bondsCheckboxEl) {
+        this.panelEl = panelEl;
+        this.dropdownEl = dropdownEl;
+        this.sliderRotEl = sliderRotEl;
+        this.sliderTransEl = sliderTransEl;
+        this.sliderRotContainer = rotContainer;
+        this.sliderTransContainer = transContainer;
+        this.sliderRotLabel = rotLabel;
+        this.labelEl = labelEl;
+        this.toggleBtn = toggleBtn;
+        this.bondsCheckboxEl = bondsCheckboxEl;
+
+        // Toggle button shows/hides the panel
+        if (this.toggleBtn) {
+            this.toggleBtn.on('click', () => {
+                if (this.active) {
+                    this.deactivate();
+                } else {
+                    this.activate();
+                }
+            });
+        }
+
+        // Dropdown: select a symmetry operation
+        if (this.dropdownEl) {
+            this.dropdownEl.on('change', () => {
+                let idx = parseInt(this.dropdownEl.val(), 10);
+                if (Number.isFinite(idx) && idx >= 0) {
+                    this.selectOperation(idx);
+                }
+            });
+        }
+
+        // Sliders: animate the operation
+        if (this.sliderRotEl) {
+            this.sliderRotEl.on('input', () => {
+                let t = parseFloat(this.sliderRotEl.val()) / 100.0;
+                this.setSliderValues(t, this.sliderTransValue);
+            });
+        }
+        if (this.sliderTransEl) {
+            this.sliderTransEl.on('input', () => {
+                let t = parseFloat(this.sliderTransEl.val()) / 100.0;
+                this.setSliderValues(this.sliderRotValue, t);
+            });
+        }
+        
+        // Checkbox: toggle ghost bonds
+        if (this.bondsCheckboxEl) {
+            this.bondsCheckboxEl.on('change', () => {
+                this.refreshGhostBondsVisibility();
+            });
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    // ACTIVATION / DEACTIVATION
+    // ─────────────────────────────────────────────
+
+    activate() {
+        if (!this.crystal || !this.crystal.phonon) return;
+        this.phonon = this.crystal.phonon;
+
+        if (!this.phonon.crystal_symmetries) {
+            console.warn('SymmetryVisualizer: No crystal_symmetries available.');
+            return;
+        }
+
+        this.active = true;
+        this.crystal.symmetryAnimationActive = true;
+
+        // Freeze phonon vibrations
+        this.savedAmplitude = this.crystal.amplitude;
+        this.savedPaused = this.crystal.paused;
+        this.crystal.amplitude = 0;
+        this.crystal.paused = false; // Keep rendering but with 0 amplitude
+
+        // Precompute Cartesian operations
+        this.precomputeOperations();
+
+        // Populate the dropdown
+        this.populateDropdown();
+
+        // Show UI panel
+        if (this.panelEl) this.panelEl.show();
+        if (this.toggleBtn) {
+            this.toggleBtn.text('✕ Close');
+            this.toggleBtn.css('background', '#dc2626');
+        }
+
+        // Auto-select the first non-identity operation
+        let firstNonIdentity = this.cartesianOps.findIndex(op => op.label !== 'E (Identity)');
+        if (firstNonIdentity < 0) firstNonIdentity = 0;
+        if (this.dropdownEl) this.dropdownEl.val(firstNonIdentity);
+        this.selectOperation(firstNonIdentity);
+    }
+
+    deactivate() {
+        this.active = false;
+        this.currentOpIndex = -1;
+        this.sliderRotValue = 0;
+        this.sliderTransValue = 0;
+
+        // Restore phonon vibrations
+        this.crystal.symmetryAnimationActive = false;
+        this.crystal.amplitude = this.savedAmplitude;
+        this.crystal.paused = this.savedPaused;
+
+        if (this.symElementMesh) {
+            this.crystal.scene.remove(this.symElementMesh);
+            if (this.symElementMesh.geometry) this.symElementMesh.geometry.dispose();
+            if (this.symElementMesh.material) this.symElementMesh.material.dispose();
+            this.symElementMesh = null;
+        }
+
+        // Remove ghost lattice
+        this.removeGhostLattice();
+
+        // Reset atom positions to equilibrium
+        this.resetAtomPositions();
+
+        // Hide UI panel
+        if (this.panelEl) this.panelEl.hide();
+        if (this.toggleBtn) {
+            this.toggleBtn.text('⚛ Symmetry');
+            this.toggleBtn.css('background', 'rgba(2, 132, 199, 0.9)');
+        }
+
+        // Trigger a render
+        this.crystal.needsRender = true;
+        this.crystal.startAnimationLoop();
+    }
+
+    // ─────────────────────────────────────────────
+    // MATH ENGINE
+    // ─────────────────────────────────────────────
+
+    /**
+     * Convert a fractional 3×3 rotation matrix R_frac to Cartesian space.
+     * R_cart = L · R_frac · L^{-1}
+     * where L is the lattice matrix (rows are lattice vectors a, b, c).
+     */
+    fractionalToCartesianRotation(R_frac, lat) {
+        let L = lat;             // 3×3 lattice vectors
+        let L_inv = matrix_inverse(L);
+        if (!L_inv) return null;
+        let temp = matrix_multiply(L, R_frac);
+        return matrix_multiply(temp, L_inv);
+    }
+
+    /**
+     * Convert a fractional translation vector to Cartesian.
+     * t_cart = L^T · t_frac  (since positions in Cartesian = frac · L)
+     * Actually: r_cart = frac_coords · lat_matrix for row-vector convention.
+     * So t_cart[i] = sum_j t_frac[j] * lat[j][i]
+     */
+    fractionalToCartesianTranslation(t_frac, lat) {
+        let t_cart = [0, 0, 0];
+        for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 3; j++) {
+                t_cart[i] += t_frac[j] * lat[j][i];
+            }
+        }
+        return t_cart;
+    }
+
+    /**
+     * Convert a Cartesian translation vector to fractional.
+     */
+    cartesianToFractionalTranslation(t_cart, lat) {
+        let L_inv = matrix_inverse(lat);
+        if (!L_inv) return [0, 0, 0];
+        let t_frac = [0, 0, 0];
+        // Fractional = Cartesian * L^-1
+        for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 3; j++) {
+                t_frac[i] += t_cart[j] * L_inv[j][i];
+            }
+        }
+        return t_frac;
+    }
+
+    /**
+     * Gram-Schmidt orthonormalization for a 3×3 matrix.
+     * Guarantees R is a proper rotation (det=+1 orthogonal) or
+     * improper rotation (det=-1) suitable for Three.js.
+     */
+    orthonormalize(M) {
+        // Extract column vectors
+        let u0 = [M[0][0], M[1][0], M[2][0]];
+        let u1 = [M[0][1], M[1][1], M[2][1]];
+        let u2 = [M[0][2], M[1][2], M[2][2]];
+
+        // Normalize u0
+        let n0 = Math.sqrt(u0[0]*u0[0] + u0[1]*u0[1] + u0[2]*u0[2]);
+        if (n0 < 1e-12) return M; // degenerate
+        u0 = [u0[0]/n0, u0[1]/n0, u0[2]/n0];
+
+        // u1 = u1 - proj(u1, u0)
+        let d10 = u1[0]*u0[0] + u1[1]*u0[1] + u1[2]*u0[2];
+        u1 = [u1[0] - d10*u0[0], u1[1] - d10*u0[1], u1[2] - d10*u0[2]];
+        let n1 = Math.sqrt(u1[0]*u1[0] + u1[1]*u1[1] + u1[2]*u1[2]);
+        if (n1 < 1e-12) return M;
+        u1 = [u1[0]/n1, u1[1]/n1, u1[2]/n1];
+
+        // u2 = u0 × u1 (guarantees right-handed orthonormal frame)
+        u2 = [
+            u0[1]*u1[2] - u0[2]*u1[1],
+            u0[2]*u1[0] - u0[0]*u1[2],
+            u0[0]*u1[1] - u0[1]*u1[0]
+        ];
+
+        // Check if original determinant was negative (improper rotation)
+        let detOrig = matrix_determinant(M);
+        if (detOrig < 0) {
+            u2 = [-u2[0], -u2[1], -u2[2]];
+        }
+
+        // Reconstruct matrix from column vectors
+        return [
+            [u0[0], u1[0], u2[0]],
+            [u0[1], u1[1], u2[1]],
+            [u0[2], u1[2], u2[2]]
+        ];
+    }
+
+    /**
+     * Extract rotation axis and angle from a 3×3 proper rotation matrix.
+     * For improper rotations (det=-1), extracts from -R.
+     * Returns { axis: THREE.Vector3, angle: Number (radians), isImproper: Boolean }
+     */
+    extractAxisAngle(R_cart) {
+        let detR = matrix_determinant(R_cart);
+        let isImproper = (detR < 0);
+
+        // Work with proper part
+        let M = isImproper ? matrix_scale(R_cart, -1) : R_cart;
+
+        let trace = M[0][0] + M[1][1] + M[2][2];
+        let cosAngle = (trace - 1.0) / 2.0;
+        cosAngle = Math.max(-1, Math.min(1, cosAngle)); // clamp
+
+        let angle = Math.acos(cosAngle);
+
+        let axis;
+        if (Math.abs(angle) < 1e-8) {
+            // Identity: no rotation. Pick arbitrary axis.
+            axis = new Vector3(0, 0, 1);
+            angle = 0;
+        } else if (Math.abs(angle - Math.PI) < 1e-8) {
+            // 180° rotation. Find axis from eigenvector of eigenvalue +1.
+            // (M + I) has rank ≤ 2; find the largest diagonal and solve.
+            let Mpi = [
+                [M[0][0] + 1, M[0][1], M[0][2]],
+                [M[1][0], M[1][1] + 1, M[1][2]],
+                [M[2][0], M[2][1], M[2][2] + 1]
+            ];
+            // Use the row with the largest norm
+            let best = 0;
+            let bestNorm = 0;
+            for (let i = 0; i < 3; i++) {
+                let n = Mpi[i][0]*Mpi[i][0] + Mpi[i][1]*Mpi[i][1] + Mpi[i][2]*Mpi[i][2];
+                if (n > bestNorm) { bestNorm = n; best = i; }
+            }
+            let v = Mpi[best];
+            let vn = Math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
+            axis = new Vector3(v[0]/vn, v[1]/vn, v[2]/vn);
+        } else {
+            // General case: axis from skew-symmetric part
+            let ax = M[2][1] - M[1][2];
+            let ay = M[0][2] - M[2][0];
+            let az = M[1][0] - M[0][1];
+            let an = Math.sqrt(ax*ax + ay*ay + az*az);
+            if (an < 1e-12) {
+                axis = new Vector3(0, 0, 1);
+            } else {
+                axis = new Vector3(ax/an, ay/an, az/an);
+            }
+        }
+
+        return { axis, angle, isImproper };
+    }
+
+    /**
+     * Classify a symmetry operation and return a human-readable label.
+     */
+    classifyOperation(R_frac, t_frac) {
+        let detR = Math.round(
+            R_frac[0][0]*(R_frac[1][1]*R_frac[2][2] - R_frac[2][1]*R_frac[1][2]) -
+            R_frac[0][1]*(R_frac[1][0]*R_frac[2][2] - R_frac[1][2]*R_frac[2][0]) +
+            R_frac[0][2]*(R_frac[1][0]*R_frac[2][1] - R_frac[1][1]*R_frac[2][0])
+        );
+        let tr = Math.round(R_frac[0][0] + R_frac[1][1] + R_frac[2][2]);
+
+        // Check if translation is non-zero (screw/glide)
+        let hasTranslation = (Math.abs(t_frac[0]) > 1e-6 ||
+                              Math.abs(t_frac[1]) > 1e-6 ||
+                              Math.abs(t_frac[2]) > 1e-6);
+        let tLabel = hasTranslation ? ' + τ' : '';
+
+        if (detR === 1) {
+            if (tr === 3)  return 'E (Identity)';
+            if (tr === -1) return 'C₂ (180° rotation)' + tLabel;
+            if (tr === 0)  return 'C₃ (120° rotation)' + tLabel;
+            if (tr === 1)  return 'C₄ (90° rotation)' + tLabel;
+            if (tr === 2)  return 'C₆ (60° rotation)' + tLabel;
+        } else if (detR === -1) {
+            if (tr === -3) return 'i (Inversion)' + tLabel;
+            if (tr === 1)  return 'σ (Mirror)' + tLabel;
+            if (tr === -2) return 'S₃ (Rotoreflection 120°)' + tLabel;
+            if (tr === -1) return 'S₄ (Rotoreflection 90°)' + tLabel;
+            if (tr === 0)  return 'S₆ (Rotoreflection 60°)' + tLabel;
+        }
+        return 'Unknown operation';
+    }
+
+    // ─────────────────────────────────────────────
+    // PRECOMPUTATION
+    // ─────────────────────────────────────────────
+
+    precomputeOperations() {
+        let rots = this.phonon.crystal_symmetries.rotations;
+        let trans = this.phonon.crystal_symmetries.translations;
+        let lat = this.phonon.lat;
+
+        // Calculate the exact mathematical center of the drawn supercell
+        let centerCart = new Vector3(0, 0, 0);
+        if (this.crystal.atoms && this.crystal.atoms.length > 0) {
+            let box = new Box3();
+            for (let atom of this.crystal.atoms) {
+                box.expandByPoint(new Vector3(atom[1], atom[2], atom[3]));
+            }
+            box.getCenter(centerCart);
+        }
+        let centerFrac = this.cartesianToFractionalTranslation([centerCart.x, centerCart.y, centerCart.z], lat);
+
+        this.cartesianOps = [];
+
+        for (let i = 0; i < rots.length; i++) {
+            let R_frac = rots[i];
+            let t_frac = trans[i];
+
+            // Auto-shift the operation pivot to the center of the drawn supercell
+            // T_frac = round(center_frac - R_frac * center_frac - t_frac)
+            let R_center = [0, 0, 0];
+            for (let r = 0; r < 3; r++) {
+                for (let c = 0; c < 3; c++) {
+                    R_center[r] += R_frac[r][c] * centerFrac[c];
+                }
+            }
+            
+            let T_frac = [
+                Math.round(centerFrac[0] - R_center[0] - t_frac[0]),
+                Math.round(centerFrac[1] - R_center[1] - t_frac[1]),
+                Math.round(centerFrac[2] - R_center[2] - t_frac[2])
+            ];
+            
+            let t_frac_shifted = [
+                t_frac[0] + T_frac[0],
+                t_frac[1] + T_frac[1],
+                t_frac[2] + T_frac[2]
+            ];
+
+            // Convert to Cartesian
+            let R_cart = this.fractionalToCartesianRotation(R_frac, lat);
+            if (!R_cart) continue;
+
+            // Orthonormalize to prevent numerical drift
+            R_cart = this.orthonormalize(R_cart);
+
+            let t_cart = this.fractionalToCartesianTranslation(t_frac_shifted, lat);
+
+            // Extract axis and angle
+            let { axis, angle, isImproper } = this.extractAxisAngle(R_cart);
+
+            // Human-readable label
+            let label = this.classifyOperation(R_frac, t_frac);
+
+            this.cartesianOps.push({
+                R_frac,
+                t_frac,
+                R_cart,
+                t_cart,
+                axis,
+                angle,
+                isImproper,
+                label,
+                index: i
+            });
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    // DROPDOWN POPULATION
+    // ─────────────────────────────────────────────
+
+    populateDropdown() {
+        if (!this.dropdownEl) return;
+        this.dropdownEl.empty();
+
+        // Group operations by type for a cleaner UI
+        for (let i = 0; i < this.cartesianOps.length; i++) {
+            let op = this.cartesianOps[i];
+            if (op.label === 'E (Identity)') continue; // Skip identity operation
+            
+            let angleDeg = Math.round(op.angle * 180 / Math.PI);
+            let displayLabel = `#${i}: ${op.label}`;
+            if (!op.isImproper && angleDeg > 0) {
+                displayLabel += ` [${angleDeg}°]`;
+            }
+            this.dropdownEl.append(`<option value="${i}">${displayLabel}</option>`);
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    // OPERATION SELECTION & ANIMATION
+    // ─────────────────────────────────────────────
+
+    selectOperation(idx) {
+        if (idx < 0 || idx >= this.cartesianOps.length) return;
+        this.currentOpIndex = idx;
+
+        let op = this.cartesianOps[idx];
+
+        // Reset sliders
+        this.sliderRotValue = 0;
+        this.sliderTransValue = 0;
+        if (this.sliderRotEl) this.sliderRotEl.val(0);
+        if (this.sliderTransEl) this.sliderTransEl.val(0);
+
+        // Check if there is a translation component
+        let hasTrans = (Math.abs(op.t_cart[0]) > 1e-4 || Math.abs(op.t_cart[1]) > 1e-4 || Math.abs(op.t_cart[2]) > 1e-4);
+        let isIdentityRot = (op.label === 'E (Identity)' || (op.angle < 1e-4 && !op.isImproper));
+
+        // Show/hide sliders
+        if (this.sliderTransContainer) {
+            if (hasTrans) this.sliderTransContainer.show();
+            else this.sliderTransContainer.hide();
+        }
+        
+        if (this.sliderRotContainer) {
+            if (isIdentityRot && hasTrans) {
+                this.sliderRotContainer.hide(); // Pure translation
+            } else {
+                this.sliderRotContainer.show();
+                if (this.sliderRotLabel) {
+                    this.sliderRotLabel.text(op.isImproper ? "Reflection / Inversion:" : "Rotation:");
+                }
+            }
+        }
+
+        // Update label
+        if (this.labelEl) {
+            let angleDeg = Math.round(op.angle * 180 / Math.PI);
+            let info = op.label;
+            if (!op.isImproper && op.angle > 0.01) {
+                info += ` — Axis: (${op.axis.x.toFixed(2)}, ${op.axis.y.toFixed(2)}, ${op.axis.z.toFixed(2)}), Angle: ${angleDeg}°`;
+            }
+            this.labelEl.text(info);
+        }
+
+        // Create ghost lattice
+        this.removeGhostLattice();
+        this.createGhostLattice();
+
+        // Set atoms to equilibrium
+        this.resetAtomPositions();
+
+        this.refreshGhostBondsVisibility();
+        this.drawSymmetryElement(op);
+
+        this.crystal.needsRender = true;
+        this.crystal.startAnimationLoop();
+    }
+
+    refreshGhostLattice() {
+        if (!this.active) return;
+        this.precomputeOperations();
+        this.populateDropdown();
+        this.createGhostLattice();
+        if (this.currentOpIndex < 0 || this.currentOpIndex >= this.cartesianOps.length) {
+            let firstNonIdentity = this.cartesianOps.findIndex(op => op.label !== 'E (Identity)');
+            this.currentOpIndex = firstNonIdentity >= 0 ? firstNonIdentity : 0;
+            if (this.dropdownEl) this.dropdownEl.val(this.currentOpIndex);
+        }
+        let op = this.cartesianOps[this.currentOpIndex];
+        if (op) {
+            this.applyInterpolatedOperation(op, this.sliderRotValue, this.sliderTransValue);
+            this.drawSymmetryElement(op);
+        }
+        this.refreshGhostBondsVisibility();
+        this.crystal.needsRender = true;
+        this.crystal.startAnimationLoop();
+    }
+
+    refreshGhostBondsVisibility() {
+        if (!this.ghostMeshes) return;
+        let show = this.bondsCheckboxEl ? this.bondsCheckboxEl.is(':checked') : true;
+        for (let mesh of this.ghostMeshes) {
+            if (mesh.name === 'symmetry-ghost-bond') {
+                mesh.visible = show;
+            }
+        }
+        this.crystal.needsRender = true;
+        this.crystal.startAnimationLoop();
+    }
+
+    setSliderValues(tRot, tTrans) {
+        this.sliderRotValue = Math.max(0, Math.min(1, tRot));
+        this.sliderTransValue = Math.max(0, Math.min(1, tTrans));
+        if (this.currentOpIndex < 0) return;
+
+        let op = this.cartesianOps[this.currentOpIndex];
+        this.applyInterpolatedOperation(op, this.sliderRotValue, this.sliderTransValue);
+
+        this.crystal.needsRender = true;
+        this.crystal.startAnimationLoop();
+    }
+
+    applyInterpolatedOperation(op, tRot, tTrans) {
+        if (!this.crystal.atomobjects || !this.crystal.atompos) return;
+
+        let nAtoms = this.crystal.atomobjects.length;
+        let center = this.crystal.geometricCenter;
+
+        let quat_full = new Quaternion();
+
+        if (!op.isImproper) {
+            let quat_target = new Quaternion();
+            quat_target.setFromAxisAngle(op.axis, op.angle);
+            let quat_identity = new Quaternion();
+            quat_full.slerpQuaternions(quat_identity, quat_target, tRot);
+        }
+
+        for (let i = 0; i < nAtoms; i++) {
+            let eqPos = this.crystal.atompos[i];
+            let newPos = new Vector3();
+
+            // 1. Shift to true crystallographic space (where origin is 0,0,0)
+            let truePos = new Vector3().copy(eqPos).add(center);
+
+            if (op.isImproper) {
+                // Linear interpolation for improper operations
+                let rx = truePos.x, ry = truePos.y, rz = truePos.z;
+                let R = op.R_cart;
+                
+                let targetX = R[0][0]*rx + R[0][1]*ry + R[0][2]*rz;
+                let targetY = R[1][0]*rx + R[1][1]*ry + R[1][2]*rz;
+                let targetZ = R[2][0]*rx + R[2][1]*ry + R[2][2]*rz;
+
+                truePos.set(
+                    rx + tRot * (targetX - rx),
+                    ry + tRot * (targetY - ry),
+                    rz + tRot * (targetZ - rz)
+                );
+            } else {
+                truePos.applyQuaternion(quat_full);
+            }
+
+            // 2. Shift back to screen space
+            newPos.copy(truePos).sub(center);
+
+            // 3. Apply translation phase
+            let tx = op.t_cart[0], ty = op.t_cart[1], tz = op.t_cart[2];
+            newPos.x += tTrans * tx;
+            newPos.y += tTrans * ty;
+            newPos.z += tTrans * tz;
+
+            // Update atom position
+            this.crystal.atomobjects[i].position.copy(newPos);
+
+            // Update InstancedMesh matrix
+            let atomInstance = this.crystal.atomInstanceRefs[i];
+            if (atomInstance) {
+                this.crystal.instanceDummy.position.copy(newPos);
+                this.crystal.instanceDummy.quaternion.set(0, 0, 0, 1);
+                this.crystal.instanceDummy.scale.set(1, 1, 1);
+                this.crystal.instanceDummy.updateMatrix();
+                atomInstance.mesh.setMatrixAt(atomInstance.instanceId, this.crystal.instanceDummy.matrix);
+            }
+        }
+
+        // Mark all instanced meshes as needing update
+        for (let i = 0; i < this.crystal.atommeshes.length; i++) {
+            this.crystal.atommeshes[i].instanceMatrix.needsUpdate = true;
+        }
+
+        // Update bonds
+        this.updateBondsForCurrentPositions();
+    }
+
+    /**
+     * Reset all atom positions back to their equilibrium positions.
+     */
+    resetAtomPositions() {
+        if (!this.crystal.atomobjects || !this.crystal.atompos) return;
+
+        for (let i = 0; i < this.crystal.atomobjects.length; i++) {
+            let eqPos = this.crystal.atompos[i];
+            this.crystal.atomobjects[i].position.copy(eqPos);
+
+            let atomInstance = this.crystal.atomInstanceRefs[i];
+            if (atomInstance) {
+                this.crystal.instanceDummy.position.copy(eqPos);
+                this.crystal.instanceDummy.quaternion.set(0, 0, 0, 1);
+                this.crystal.instanceDummy.scale.set(1, 1, 1);
+                this.crystal.instanceDummy.updateMatrix();
+                atomInstance.mesh.setMatrixAt(atomInstance.instanceId, this.crystal.instanceDummy.matrix);
+            }
+        }
+
+        for (let i = 0; i < this.crystal.atommeshes.length; i++) {
+            this.crystal.atommeshes[i].instanceMatrix.needsUpdate = true;
+        }
+
+        this.updateBondsForCurrentPositions();
+    }
+
+    /**
+     * Recalculate bond positions based on current atom positions.
+     * Uses the same bond-update logic as VibCrystal.render().
+     */
+    updateBondsForCurrentPositions() {
+        if (!this.crystal.bonds) return;
+
+        for (let i = 0; i < this.crystal.bonds.length; i++) {
+            let bond = this.crystal.bonds[i];
+            let a = bond.a; // THREE.Vector3 reference (points to atom.position)
+            let b = bond.b;
+
+            // Compute midpoint and direction
+            let midpoint = new Vector3().addVectors(a, b).multiplyScalar(0.5);
+            let direction = new Vector3().subVectors(b, a);
+            let lengthNow = direction.length();
+            direction.normalize();
+
+            // Quaternion to orient the cylinder
+            let quaternion = new Quaternion();
+            let yAxis = new Vector3(0, 1, 0);
+            quaternion.setFromUnitVectors(yAxis, direction);
+
+            if (this.crystal.bondColorByAtom && this.crystal.splitBondObjects && this.crystal.splitBondObjects.length) {
+                let offset = direction.clone().multiplyScalar(lengthNow * 0.25);
+                let bondPair = this.crystal.splitBondObjects[i];
+                if (bondPair && bondPair.meshA && bondPair.meshB) {
+                    bondPair.meshA.position.copy(midpoint).sub(offset);
+                    bondPair.meshB.position.copy(midpoint).add(offset);
+                    bondPair.meshA.setRotationFromQuaternion(quaternion);
+                    bondPair.meshB.setRotationFromQuaternion(quaternion);
+                    bondPair.meshA.scale.set(1, lengthNow * 0.5, 1);
+                    bondPair.meshB.scale.set(1, lengthNow * 0.5, 1);
+                }
+            } else if (this.crystal.bondColorByAtom && this.crystal.bondmeshes && this.crystal.bondmeshes.length >= 2) {
+                let offset = direction.clone().multiplyScalar(lengthNow * 0.25);
+                this.crystal.instanceDummy.quaternion.copy(quaternion);
+                this.crystal.instanceDummy.scale.set(1, lengthNow * 0.5, 1);
+
+                this.crystal.instanceDummy.position.copy(midpoint).sub(offset);
+                this.crystal.instanceDummy.updateMatrix();
+                this.crystal.bondmeshes[0].setMatrixAt(i, this.crystal.instanceDummy.matrix);
+
+                this.crystal.instanceDummy.position.copy(midpoint).add(offset);
+                this.crystal.instanceDummy.updateMatrix();
+                this.crystal.bondmeshes[1].setMatrixAt(i, this.crystal.instanceDummy.matrix);
+            } else if (this.crystal.bondmesh) {
+                this.crystal.instanceDummy.position.copy(midpoint);
+                this.crystal.instanceDummy.quaternion.copy(quaternion);
+                this.crystal.instanceDummy.scale.set(1, lengthNow, 1);
+                this.crystal.instanceDummy.updateMatrix();
+                this.crystal.bondmesh.setMatrixAt(i, this.crystal.instanceDummy.matrix);
+            }
+        }
+
+        // Mark bond meshes as needing update
+        if (this.crystal.bondmeshes && this.crystal.bondmeshes.length) {
+            for (let i = 0; i < this.crystal.bondmeshes.length; i++) {
+                this.crystal.bondmeshes[i].instanceMatrix.needsUpdate = true;
+            }
+        } else if (this.crystal.bondmesh) {
+            this.crystal.bondmesh.instanceMatrix.needsUpdate = true;
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    // VISUALIZE SYMMETRY ELEMENTS (Bonus Idea)
+    // ─────────────────────────────────────────────
+
+    drawSymmetryElement(op) {
+        if (this.symElementMesh) {
+            this.crystal.scene.remove(this.symElementMesh);
+            if (this.symElementMesh.geometry) this.symElementMesh.geometry.dispose();
+            if (this.symElementMesh.material) this.symElementMesh.material.dispose();
+            this.symElementMesh = null;
+        }
+
+        if (!op || op.label === 'E (Identity)') return;
+
+        // The physical crystallographic origin is at -geometricCenter in viewer space
+        let center = new Vector3().copy(this.crystal.geometricCenter).multiplyScalar(-1);
+
+        if (op.label.startsWith('i')) {
+            // Draw Inversion center as a glowing amber dot
+            let geom = new SphereGeometry(0.2, 16, 16);
+            let mat = new MeshPhongMaterial({ color: 0xffea00, emissive: 0xaa8800, shininess: 100, transparent: true, opacity: 0.9, depthWrite: false });
+            let mesh = new Mesh(geom, mat);
+            mesh.position.copy(center);
+            this.symElementMesh = mesh;
+            this.crystal.scene.add(mesh);
+        } else if (op.label.startsWith('σ')) {
+            // Draw Mirror plane as a semi-transparent cyan surface
+            let geom = new PlaneGeometry(25, 25);
+            let mat = new MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.35, side: DoubleSide, depthWrite: false });
+            let mesh = new Mesh(geom, mat);
+            
+            // Align plane with the normal (op.axis)
+            let zAxis = new Vector3(0, 0, 1);
+            let quaternion = new Quaternion().setFromUnitVectors(zAxis, op.axis);
+            mesh.quaternion.copy(quaternion);
+            mesh.position.copy(center);
+
+            this.symElementMesh = mesh;
+            this.crystal.scene.add(mesh);
+        } else if (op.label.startsWith('C') || op.label.startsWith('S')) {
+            // Draw Rotation axis as a glowing magenta line/cylinder
+            let geom = new CylinderGeometry(0.06, 0.06, 50, 12);
+            let mat = new MeshBasicMaterial({ color: 0xff00ff, transparent: true, opacity: 0.8, depthWrite: false });
+            let mesh = new Mesh(geom, mat);
+            
+            // Align cylinder with axis
+            let yAxis = new Vector3(0, 1, 0);
+            let quaternion = new Quaternion().setFromUnitVectors(yAxis, op.axis);
+            mesh.quaternion.copy(quaternion);
+            mesh.position.copy(center);
+
+            this.symElementMesh = mesh;
+            this.crystal.scene.add(mesh);
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    // GHOST LATTICE
+    // ─────────────────────────────────────────────
+
+    /**
+     * Create semi-transparent "ghost" copies of all atoms at their
+     * equilibrium positions as a visual reference.
+     */
+    createGhostLattice() {
+        if (!this.crystal.atomobjects || !this.crystal.atompos) return;
+        this.removeGhostLattice();
+
+        let sphereGeom = new SphereGeometry(0.3, 16, 12);
+
+        // Cache materials by atom number to save memory
+        let materialCache = {};
+
+        for (let i = 0; i < this.crystal.atompos.length; i++) {
+            let pos = this.crystal.atompos[i];
+            let atomNumber = this.crystal.atomobjects[i].atom_number;
+            
+            if (!materialCache[atomNumber]) {
+                let colorHex = this.crystal.getAtomColorHex(atomNumber);
+                materialCache[atomNumber] = new MeshLambertMaterial({
+                    color: colorHex,
+                    transparent: true,
+                    opacity: 0.3,
+                    depthWrite: false
+                });
+            }
+
+            let mesh = new Mesh(sphereGeom, materialCache[atomNumber]);
+            mesh.position.copy(pos);
+            mesh.name = 'symmetry-ghost';
+            this.crystal.scene.add(mesh);
+            this.ghostMeshes.push(mesh);
+        }
+
+        // Ghost bonds
+        if (this.crystal.bonds && this.crystal.bonds.length > 0) {
+            let bondMat = new MeshLambertMaterial({
+                color: 0x666666,
+                transparent: true,
+                opacity: 0.15,
+                depthWrite: false
+            });
+
+            let bondGeom = new CylinderGeometry(0.06, 0.06, 1, 6);
+
+            for (let i = 0; i < this.crystal.bonds.length; i++) {
+                let bond = this.crystal.bonds[i];
+                let a = bond.a;
+                let b = bond.b;
+
+                // Use stored atom positions for bond endpoints
+                if (!a || !b) continue;
+
+                let midpoint = new Vector3().addVectors(a, b).multiplyScalar(0.5);
+                let dir = new Vector3().subVectors(b, a);
+                let len = dir.length();
+                dir.normalize();
+
+                let bondMesh = new Mesh(bondGeom, bondMat);
+                bondMesh.position.copy(midpoint);
+                bondMesh.scale.set(1, len, 1);
+                let yAxis = new Vector3(0, 1, 0);
+                bondMesh.quaternion.setFromUnitVectors(yAxis, dir);
+                bondMesh.name = 'symmetry-ghost-bond';
+                this.crystal.scene.add(bondMesh);
+                this.ghostMeshes.push(bondMesh);
+            }
+        }
+
+        // Add emphasis to the primitive unit cell
+        if (this.crystal.phonon && this.crystal.phonon.lat) {
+            let cellObj = createCellLineObject(this.crystal.phonon.lat, this.crystal.geometricCenter, 0x0284c7);
+            cellObj.name = 'symmetry-ghost-cell';
+            
+            // Make the lines slightly thicker and transparent if possible
+            cellObj.material.transparent = true;
+            cellObj.material.opacity = 0.8;
+            
+            this.crystal.scene.add(cellObj);
+            this.ghostMeshes.push(cellObj);
+        }
+    }
+
+    removeGhostLattice() {
+        for (let mesh of this.ghostMeshes) {
+            this.crystal.scene.remove(mesh);
+            if (mesh.geometry) mesh.geometry.dispose();
+            if (mesh.material) mesh.material.dispose();
+        }
+        this.ghostMeshes = [];
+    }
+
+    // ─────────────────────────────────────────────
+    // CLEANUP (called when material changes)
+    // ─────────────────────────────────────────────
+
+    onMaterialChanged() {
+        if (this.active) {
+            this.deactivate();
+        }
+    }
+}
+
 if (ColorManagement && typeof ColorManagement.enabled === 'boolean') {
     ColorManagement.enabled = false;
 }
@@ -111388,7 +113264,7 @@ p.setExportXSFButton($$1('#xsf'));
 p.setTitle($$1('#name'));
 
 p.updateMenu();
-p.getUrlVars({json: "data/localdb2/al4li4o8/data.json", name:"Al4Li4O8 ( test )"}); //default material
+p.getUrlVars({json: "data/localdb/graphene/data.json", name:"Graphene [1]"});
 
 //set dom objects vibcrystal
 v.setCameraDirectionButton($$1('#camerax'),'x');
@@ -111400,7 +113276,17 @@ v.setCameraDirectionButton($$1('#cameraqperp'), 'q-perp');
 v.setDisplayCombo($$1('#displaystyle'));
 v.setCellCheckbox($$1('#drawcell'));
 
-v.setShadingCheckbox($$1('#drawshading'));
+$$1('input[name="appearance_radio"]').change(function() {
+    let val = $$1('input[name="appearance_radio"]:checked').val();
+    if (val === 'shading') {
+        v.shading = true;
+        v.lines = false;
+    } else if (val === 'color') {
+        v.shading = false;
+        v.lines = false;
+    }
+    v.updatelocal(true);
+});
 v.setWebmButton($$1('#webmbutton'));
 v.setGifButton($$1('#gifbutton'));
 v.setArrowsCheckbox($$1('#drawvectors'));
@@ -111428,6 +113314,23 @@ v.setAdvancedAppearanceControls(
     $$1('#appearance_reset_vectors_button'),
 );
 v.setAppearanceUpdatedCallback(() => p.refreshAppearanceUI());
+
+// Wire up the Symmetry Visualizer
+const symViz = new SymmetryVisualizer(v);
+symViz.bindDOM(
+    $$1('#sym-animator-panel'),
+    $$1('#sym-op-select'),
+    $$1('#sym-slider-rot'),
+    $$1('#sym-slider-trans'),
+    $$1('#sym-slider-rot-container'),
+    $$1('#sym-slider-trans-container'),
+    $$1('#sym-slider-rot-label'),
+    $$1('#sym-op-label'),
+    $$1('#sym-animator-toggle'),
+    $$1('#sym-show-bonds')
+);
+// Deactivate symmetry animator when material changes
+p.onMaterialChanged = () => symViz.onMaterialChanged();
 
 // check if webgl is available
 if ( ! Detector.webgl ) {

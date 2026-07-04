@@ -602,6 +602,137 @@ ap {
 }
 
 
+/* Symmetry Animator Panel Styles */
+#sym-animator-toggle {
+    position: absolute; bottom: 8px; right: 8px; z-index: 120;
+    padding: 5px 12px; border: none; border-radius: 6px;
+    background: rgba(2, 132, 199, 0.9); color: white;
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    backdrop-filter: blur(4px);
+    transition: background 0.2s, transform 0.1s;
+}
+
+#sym-animator-panel {
+    display: none; position: absolute; bottom: 40px; right: 8px; z-index: 110;
+    width: 300px; padding: 12px; border-radius: 8px;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    border: 1px solid rgba(255,255,255,0.6);
+    font-family: 'Inter', Arial, sans-serif;
+    font-size: 12px; color: #1e293b;
+    user-select: none; -webkit-user-select: none; -webkit-user-drag: none;
+}
+
+.sym-panel-title {
+    font-weight: 700; font-size: 13px; color: #0284c7; 
+    margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;
+}
+
+.sym-label {
+    font-weight: 600; font-size: 11px; color: #475569;
+}
+
+#sym-op-select {
+    width: 100%; margin: 4px 0 10px 0; padding: 5px 8px;
+    border: 1px solid #cbd5e1; border-radius: 5px;
+    background: #f8fafc; font-size: 12px; color: #1e293b;
+    cursor: pointer; outline: none;
+}
+
+.sym-slider-row {
+    width: 100%; margin: 4px 0 8px 0;
+}
+
+#sym-slider-rot {
+    accent-color: #0284c7;
+}
+
+#sym-slider-trans {
+    accent-color: #10b981;
+}
+
+.sym-checkbox-row {
+    margin: 6px 0 10px 0; display: flex; align-items: center; gap: 6px;
+}
+
+#sym-show-bonds {
+    accent-color: #0284c7; cursor: pointer;
+}
+
+.sym-checkbox-label {
+    font-size: 11px; color: #475569; cursor: pointer; user-select: none;
+}
+
+#sym-op-label {
+    font-size: 11px; color: #64748b; line-height: 1.4;
+    min-height: 28px; padding: 4px 0;
+}
+
+/* Plot Properties Panel Styles */
+#plot_properties_panel {
+    background: rgba(255, 255, 255, 0.95);
+    padding: 10px 15px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-family: 'Inter', Arial, sans-serif;
+}
+
+.plot-properties-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.plot-properties-label {
+    font-weight: bold;
+    color: #334155;
+    font-size: 13px;
+    margin: 0;
+}
+
+#heatmap_property {
+    padding: 6px 30px 6px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background-color: #f8fafc;
+    color: #1e293b;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    outline: none;
+    appearance: none;
+    background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23475569%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E');
+    background-repeat: no-repeat;
+    background-position: right 10px top 50%;
+    background-size: 10px auto;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+#selected_mode_info {
+    padding: 10px;
+    margin-top: 10px;
+    background: #f1f5f9;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #1e293b;
+    border: 1px solid #cbd5e1;
+    text-align: center;
+}
+
+.selected-mode-label {
+    font-weight: bold;
+}
+
+.selected-mode-value {
+    font-family: monospace;
+    font-weight: 600;
+}
+
 @media all and (max-width: 700px) {
     .navigation {
         justify-content: space-around;

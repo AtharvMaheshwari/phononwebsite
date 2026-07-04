@@ -112,7 +112,12 @@
 
                     <div style="display: flex; align-items: center; gap: 4px;">
                         <input id="mode_weights_plot" type="checkbox">mode weights</input>
-                        <input id="drawshading" type="checkbox" checked style="margin-left: 10px;"> shading</input>
+                        
+                        <label style="margin-left: 10px;"><input type="radio" name="appearance_radio" value="shading" checked> Shaded</label>
+                        <label><input type="radio" name="appearance_radio" value="color"> Flat Color</label>
+                        
+                        <input id="drawshading" type="checkbox" checked style="display:none">
+                        <input id="drawlines" type="checkbox" style="display:none">
                     </div>
 
 
@@ -257,13 +262,47 @@
             <div style="display: flex; flex-direction: column; flex: 1; min-width: 0; height: 100%;">
                 <div class="material-name"><h1 id="name">Material</h1></div>
                 <div class="flex-container" style="flex: 1; min-height: 0; height: 100%;">
-                    <div class="flex-vibcrystal" style="height: 100%;"><div id="vibcrystal"></div></div>
+                    <div class="flex-vibcrystal" style="height: 100%; position: relative;">
+                        <div id="vibcrystal"></div>
+
+                        <!-- Symmetry Animator Toggle Button -->
+                        <button id="sym-animator-toggle" type="button">Symmetry Viewer</button>
+
+                        <!-- Symmetry Animator Panel (hidden by default) -->
+                        <div id="sym-animator-panel">
+                            <div class="sym-panel-title">
+                                Symmetry Operations
+                            </div>
+                            <label for="sym-op-select" class="sym-label">Operation:</label>
+                            <select id="sym-op-select"></select>
+
+                            <div id="sym-sliders-container">
+                                <div id="sym-slider-rot-container">
+                                    <label id="sym-slider-rot-label" for="sym-slider-rot" class="sym-label">Rotation / Reflection:</label>
+                                    <input id="sym-slider-rot" class="sym-slider-row" type="range" min="0" max="100" value="0" step="1">
+                                </div>
+                                
+                                <div id="sym-slider-trans-container" style="display: none;">
+                                    <label for="sym-slider-trans" class="sym-label">Translation:</label>
+                                    <input id="sym-slider-trans" class="sym-slider-row" type="range" min="0" max="100" value="0" step="1">
+                                </div>
+                            </div>
+
+                            <div id="sym-op-label">Select an operation to animate.</div>
+                            
+                            <div class="sym-checkbox-row">
+                                <input type="checkbox" id="sym-show-bonds">
+                                <label for="sym-show-bonds" class="sym-checkbox-label">Show Ghost Bonds</label>
+                            </div>
+                        </div>
+                    </div>
+
             <div class="flex-highcharts" style="height: 100%;">
                 <div id="highcharts"></div>
-                <div id="plot_properties_panel" style="background: rgba(255, 255, 255, 0.95); padding: 10px 15px; border-top: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 8px; font-family: 'Inter', Arial, sans-serif;">
-                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
-                        <label for="heatmap_property" style="font-weight: bold; color: #334155; font-size: 13px; margin: 0;">Properties</label>
-                        <select id="heatmap_property" style="padding: 6px 30px 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; background-color: #f8fafc; color: #1e293b; font-size: 13px; font-weight: 500; cursor: pointer; outline: none; appearance: none; background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23475569%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E'); background-repeat: no-repeat; background-position: right 10px top 50%; background-size: 10px auto; transition: border-color 0.2s, box-shadow 0.2s;">
+                <div id="plot_properties_panel">
+                    <div class="plot-properties-row">
+                        <label for="heatmap_property" class="plot-properties-label">Properties</label>
+                        <select id="heatmap_property">
                             <option value="none">Frequency only</option>
                             <option value="cycloidicity_x">Cycloidicity Cx</option>
                             <option value="cycloidicity_y">Cycloidicity Cy</option>
@@ -280,9 +319,9 @@
                         </select>
                     </div>
                     <div id="heatmap_colorbar" style="width: 100%; min-width: 180px; display: none;"></div>
-                    <div id="selected_mode_info" style="display: none; padding: 10px; margin-top: 10px; background: #f1f5f9; border-radius: 6px; font-size: 13px; color: #1e293b; border: 1px solid #cbd5e1; text-align: center;">
-                        <span style="font-weight: bold;">Frequency:</span> <span id="info_frequency" style="font-family: monospace; font-weight: 600; margin-right: 15px;"></span>
-                        <span id="info_property_row" style="display: none;"><span id="info_property_label" style="font-weight: bold;">Property:</span> <span id="info_property_value" style="font-family: monospace; font-weight: 600;"></span></span>
+                    <div id="selected_mode_info" style="display: none;">
+                        <span class="selected-mode-label">Frequency:</span> <span id="info_frequency" class="selected-mode-value" style="margin-right: 15px;"></span>
+                        <span id="info_property_row" style="display: none;"><span id="info_property_label" class="selected-mode-label">Property:</span> <span id="info_property_value" class="selected-mode-value"></span></span>
                     </div>
                 </div>
                 </div>
