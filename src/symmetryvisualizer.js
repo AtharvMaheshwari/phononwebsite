@@ -814,6 +814,31 @@ export class SymmetryVisualizer {
         // Cache materials by atom number to save memory
         let materialCache = {};
 
+        let reps = this.crystal.phonon && this.crystal.phonon.repetitions ? this.crystal.phonon.repetitions : [1, 1, 1];
+        let offsets = [[0, 0, 0]];
+
+        if (this.crystal.phonon && this.crystal.phonon.lat) {
+            let lat = this.crystal.phonon.lat;
+            // Multiply the primitive lattice vectors by the repetitions to get the supercell vectors
+            let v1 = new THREE.Vector3(lat[0][0], lat[0][1], lat[0][2]).multiplyScalar(reps[0]);
+            let v2 = new THREE.Vector3(lat[1][0], lat[1][1], lat[1][2]).multiplyScalar(reps[1]);
+            let v3 = new THREE.Vector3(lat[2][0], lat[2][1], lat[2][2]).multiplyScalar(reps[2]);
+            
+            // Add 26 neighboring supercells
+            for (let i = -1; i <= 1; i++) {
+                for (let j = -1; j <= 1; j++) {
+                    for (let k = -1; k <= 1; k++) {
+                        if (i === 0 && j === 0 && k === 0) continue;
+                        let offset = new THREE.Vector3()
+                            .addScaledVector(v1, i)
+                            .addScaledVector(v2, j)
+                            .addScaledVector(v3, k);
+                        offsets.push([offset.x, offset.y, offset.z]);
+                    }
+                }
+            }
+        }
+
         for (let i = 0; i < this.crystal.atompos.length; i++) {
             let pos = this.crystal.atompos[i];
             let atomNumber = this.crystal.atomobjects[i].atom_number;
@@ -826,13 +851,24 @@ export class SymmetryVisualizer {
                     opacity: 0.3,
                     depthWrite: false
                 });
+                materialCache[atomNumber + '_shell'] = new THREE.MeshLambertMaterial({
+                    color: colorHex,
+                    transparent: true,
+                    opacity: 0.1, // lowered opacity for boundary shell
+                    depthWrite: false
+                });
             }
 
-            let mesh = new THREE.Mesh(sphereGeom, materialCache[atomNumber]);
-            mesh.position.copy(pos);
-            mesh.name = 'symmetry-ghost';
-            this.crystal.scene.add(mesh);
-            this.ghostMeshes.push(mesh);
+            for (let offset of offsets) {
+                let isCenter = (offset[0] === 0 && offset[1] === 0 && offset[2] === 0);
+                let mat = isCenter ? materialCache[atomNumber] : materialCache[atomNumber + '_shell'];
+                
+                let mesh = new THREE.Mesh(sphereGeom, mat);
+                mesh.position.set(pos.x + offset[0], pos.y + offset[1], pos.z + offset[2]);
+                mesh.name = 'symmetry-ghost';
+                this.crystal.scene.add(mesh);
+                this.ghostMeshes.push(mesh);
+            }
         }
 
         // Ghost bonds
