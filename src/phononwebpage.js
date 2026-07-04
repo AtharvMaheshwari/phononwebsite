@@ -530,7 +530,18 @@ export class PhononWebpage {
         if (this.visualizer) {
             this.visualizer.modeScaleAutoInitialized = false;
         }
-        this.setRepetitions(this.phonon.repetitions);
+        if (this.phonon.repetitions) {
+            this.setRepetitions(this.phonon.repetitions);
+        } else {
+            let n = this.phonon.natoms;
+            if (n > 20) {
+                this.setRepetitions([1,1,1]);
+            } else if (n > 10) {
+                this.setRepetitions([2,2,2]);
+            } else {
+                this.setRepetitions([3,3,3]);
+            }
+        }
         this.updateModeSelectionInputs();
         if (!this.enforceVisualizationLimits(true)) {
             return;
@@ -568,9 +579,20 @@ export class PhononWebpage {
         let apc = this.phonon.atom_pos_car;
         let atoms = [];
 
-        for (let ix=0;ix<nx;ix++) {
-            for (let iy=0;iy<ny;iy++) {
-                for (let iz=0;iz<nz;iz++) {
+        let nx_int = parseInt(nx);
+        let ny_int = parseInt(ny);
+        let nz_int = parseInt(nz);
+
+        let ix_start = -Math.floor(nx_int/2);
+        let ix_end = ix_start + nx_int;
+        let iy_start = -Math.floor(ny_int/2);
+        let iy_end = iy_start + ny_int;
+        let iz_start = -Math.floor(nz_int/2);
+        let iz_end = iz_start + nz_int;
+
+        for (let ix=ix_start; ix<ix_end; ix++) {
+            for (let iy=iy_start; iy<iy_end; iy++) {
+                for (let iz=iz_start; iz<iz_end; iz++) {
                     for (let i=0;i<this.phonon.natoms;i++) {
 
                         //postions of the atoms
@@ -634,9 +656,20 @@ export class PhononWebpage {
             }
         }
 
-        for (let ix=0; ix<nx; ix++) {
-            for (let iy=0; iy<ny; iy++) {
-                for (let iz=0; iz<nz; iz++) {
+        let nx_int = parseInt(nx);
+        let ny_int = parseInt(ny);
+        let nz_int = parseInt(nz);
+
+        let ix_start = -Math.floor(nx_int/2);
+        let ix_end = ix_start + nx_int;
+        let iy_start = -Math.floor(ny_int/2);
+        let iy_end = iy_start + ny_int;
+        let iz_start = -Math.floor(nz_int/2);
+        let iz_end = iz_start + nz_int;
+
+        for (let ix=ix_start; ix<ix_end; ix++) {
+            for (let iy=iy_start; iy<iy_end; iy++) {
+                for (let iz=iz_start; iz<iz_end; iz++) {
 
                     for (let i=0; i<phonon.natoms; i++) {
                         let sprod = mat.vec_dot(kpt,[ix,iy,iz]) + atom_phase[i];

@@ -119,9 +119,14 @@ const symViz = new SymmetryVisualizer(v);
 symViz.bindDOM(
     $('#sym-animator-panel'),
     $('#sym-op-select'),
-    $('#sym-slider'),
+    $('#sym-slider-rot'),
+    $('#sym-slider-trans'),
+    $('#sym-slider-rot-container'),
+    $('#sym-slider-trans-container'),
+    $('#sym-slider-rot-label'),
     $('#sym-op-label'),
-    $('#sym-animator-toggle')
+    $('#sym-animator-toggle'),
+    $('#sym-show-bonds')
 );
 // Deactivate symmetry animator when material changes
 p.onMaterialChanged = () => symViz.onMaterialChanged();

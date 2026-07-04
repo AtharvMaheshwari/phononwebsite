@@ -13,6 +13,7 @@
 
 import * as THREE from 'three';
 import * as mat from './mat.js';
+import { createCellLineObject } from './viewergeometry.js';
 
 export class SymmetryVisualizer {
 
@@ -24,7 +25,8 @@ export class SymmetryVisualizer {
         // State
         this.active = false;
         this.currentOpIndex = -1;
-        this.sliderValue = 0.0; // 0 → 1
+        this.sliderRotValue = 0.0;
+        this.sliderTransValue = 0.0;
 
         // Ghost lattice meshes (THREE objects added to scene)
         this.ghostMeshes = [];
@@ -38,22 +40,35 @@ export class SymmetryVisualizer {
 
         // DOM references (set externally)
         this.dropdownEl = null;
-        this.sliderEl = null;
+        this.sliderRotEl = null;
+        this.sliderTransEl = null;
+        this.sliderRotContainer = null;
+        this.sliderTransContainer = null;
+        this.sliderRotLabel = null;
         this.panelEl = null;
         this.labelEl = null;
         this.toggleBtn = null;
+        this.bondsCheckboxEl = null;
+
+        // Hook into structure updates (e.g. changing cell repetitions)
+        this.crystal.onStructureRebuilt = () => this.refreshGhostLattice();
     }
 
     // ─────────────────────────────────────────────
     // DOM BINDING
     // ─────────────────────────────────────────────
 
-    bindDOM(panelEl, dropdownEl, sliderEl, labelEl, toggleBtn) {
+    bindDOM(panelEl, dropdownEl, sliderRotEl, sliderTransEl, rotContainer, transContainer, rotLabel, labelEl, toggleBtn, bondsCheckboxEl) {
         this.panelEl = panelEl;
         this.dropdownEl = dropdownEl;
-        this.sliderEl = sliderEl;
+        this.sliderRotEl = sliderRotEl;
+        this.sliderTransEl = sliderTransEl;
+        this.sliderRotContainer = rotContainer;
+        this.sliderTransContainer = transContainer;
+        this.sliderRotLabel = rotLabel;
         this.labelEl = labelEl;
         this.toggleBtn = toggleBtn;
+        this.bondsCheckboxEl = bondsCheckboxEl;
 
         // Toggle button shows/hides the panel
         if (this.toggleBtn) {
@@ -76,11 +91,24 @@ export class SymmetryVisualizer {
             });
         }
 
-        // Slider: animate the operation
-        if (this.sliderEl) {
-            this.sliderEl.on('input', () => {
-                let t = parseFloat(this.sliderEl.val()) / 100.0;
-                this.setSliderValue(t);
+        // Sliders: animate the operation
+        if (this.sliderRotEl) {
+            this.sliderRotEl.on('input', () => {
+                let t = parseFloat(this.sliderRotEl.val()) / 100.0;
+                this.setSliderValues(t, this.sliderTransValue);
+            });
+        }
+        if (this.sliderTransEl) {
+            this.sliderTransEl.on('input', () => {
+                let t = parseFloat(this.sliderTransEl.val()) / 100.0;
+                this.setSliderValues(this.sliderRotValue, t);
+            });
+        }
+        
+        // Checkbox: toggle ghost bonds
+        if (this.bondsCheckboxEl) {
+            this.bondsCheckboxEl.on('change', () => {
+                this.refreshGhostBondsVisibility();
             });
         }
     }
@@ -130,12 +158,20 @@ export class SymmetryVisualizer {
     deactivate() {
         this.active = false;
         this.currentOpIndex = -1;
-        this.sliderValue = 0;
+        this.sliderRotValue = 0;
+        this.sliderTransValue = 0;
 
         // Restore phonon vibrations
         this.crystal.symmetryAnimationActive = false;
         this.crystal.amplitude = this.savedAmplitude;
         this.crystal.paused = this.savedPaused;
+
+        if (this.symElementMesh) {
+            this.crystal.scene.remove(this.symElementMesh);
+            if (this.symElementMesh.geometry) this.symElementMesh.geometry.dispose();
+            if (this.symElementMesh.material) this.symElementMesh.material.dispose();
+            this.symElementMesh = null;
+        }
 
         // Remove ghost lattice
         this.removeGhostLattice();
@@ -186,6 +222,22 @@ export class SymmetryVisualizer {
             }
         }
         return t_cart;
+    }
+
+    /**
+     * Convert a Cartesian translation vector to fractional.
+     */
+    cartesianToFractionalTranslation(t_cart, lat) {
+        let L_inv = mat.matrix_inverse(lat);
+        if (!L_inv) return [0, 0, 0];
+        let t_frac = [0, 0, 0];
+        // Fractional = Cartesian * L^-1
+        for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 3; j++) {
+                t_frac[i] += t_cart[j] * L_inv[j][i];
+            }
+        }
+        return t_frac;
     }
 
     /**
@@ -331,11 +383,43 @@ export class SymmetryVisualizer {
         let trans = this.phonon.crystal_symmetries.translations;
         let lat = this.phonon.lat;
 
+        // Calculate the exact mathematical center of the drawn supercell
+        let centerCart = new THREE.Vector3(0, 0, 0);
+        if (this.crystal.atoms && this.crystal.atoms.length > 0) {
+            let box = new THREE.Box3();
+            for (let atom of this.crystal.atoms) {
+                box.expandByPoint(new THREE.Vector3(atom[1], atom[2], atom[3]));
+            }
+            box.getCenter(centerCart);
+        }
+        let centerFrac = this.cartesianToFractionalTranslation([centerCart.x, centerCart.y, centerCart.z], lat);
+
         this.cartesianOps = [];
 
         for (let i = 0; i < rots.length; i++) {
             let R_frac = rots[i];
             let t_frac = trans[i];
+
+            // Auto-shift the operation pivot to the center of the drawn supercell
+            // T_frac = round(center_frac - R_frac * center_frac - t_frac)
+            let R_center = [0, 0, 0];
+            for (let r = 0; r < 3; r++) {
+                for (let c = 0; c < 3; c++) {
+                    R_center[r] += R_frac[r][c] * centerFrac[c];
+                }
+            }
+            
+            let T_frac = [
+                Math.round(centerFrac[0] - R_center[0] - t_frac[0]),
+                Math.round(centerFrac[1] - R_center[1] - t_frac[1]),
+                Math.round(centerFrac[2] - R_center[2] - t_frac[2])
+            ];
+            
+            let t_frac_shifted = [
+                t_frac[0] + T_frac[0],
+                t_frac[1] + T_frac[1],
+                t_frac[2] + T_frac[2]
+            ];
 
             // Convert to Cartesian
             let R_cart = this.fractionalToCartesianRotation(R_frac, lat);
@@ -344,7 +428,7 @@ export class SymmetryVisualizer {
             // Orthonormalize to prevent numerical drift
             R_cart = this.orthonormalize(R_cart);
 
-            let t_cart = this.fractionalToCartesianTranslation(t_frac, lat);
+            let t_cart = this.fractionalToCartesianTranslation(t_frac_shifted, lat);
 
             // Extract axis and angle
             let { axis, angle, isImproper } = this.extractAxisAngle(R_cart);
@@ -377,9 +461,11 @@ export class SymmetryVisualizer {
         // Group operations by type for a cleaner UI
         for (let i = 0; i < this.cartesianOps.length; i++) {
             let op = this.cartesianOps[i];
+            if (op.label === 'E (Identity)') continue; // Skip identity operation
+            
             let angleDeg = Math.round(op.angle * 180 / Math.PI);
             let displayLabel = `#${i}: ${op.label}`;
-            if (op.label !== 'E (Identity)' && !op.isImproper && angleDeg > 0) {
+            if (!op.isImproper && angleDeg > 0) {
                 displayLabel += ` [${angleDeg}°]`;
             }
             this.dropdownEl.append(`<option value="${i}">${displayLabel}</option>`);
@@ -394,12 +480,36 @@ export class SymmetryVisualizer {
         if (idx < 0 || idx >= this.cartesianOps.length) return;
         this.currentOpIndex = idx;
 
-        // Reset slider
-        this.sliderValue = 0;
-        if (this.sliderEl) this.sliderEl.val(0);
+        let op = this.cartesianOps[idx];
+
+        // Reset sliders
+        this.sliderRotValue = 0;
+        this.sliderTransValue = 0;
+        if (this.sliderRotEl) this.sliderRotEl.val(0);
+        if (this.sliderTransEl) this.sliderTransEl.val(0);
+
+        // Check if there is a translation component
+        let hasTrans = (Math.abs(op.t_cart[0]) > 1e-4 || Math.abs(op.t_cart[1]) > 1e-4 || Math.abs(op.t_cart[2]) > 1e-4);
+        let isIdentityRot = (op.label === 'E (Identity)' || (op.angle < 1e-4 && !op.isImproper));
+
+        // Show/hide sliders
+        if (this.sliderTransContainer) {
+            if (hasTrans) this.sliderTransContainer.show();
+            else this.sliderTransContainer.hide();
+        }
+        
+        if (this.sliderRotContainer) {
+            if (isIdentityRot && hasTrans) {
+                this.sliderRotContainer.hide(); // Pure translation
+            } else {
+                this.sliderRotContainer.show();
+                if (this.sliderRotLabel) {
+                    this.sliderRotLabel.text(op.isImproper ? "Reflection / Inversion:" : "Rotation:");
+                }
+            }
+        }
 
         // Update label
-        let op = this.cartesianOps[idx];
         if (this.labelEl) {
             let angleDeg = Math.round(op.angle * 180 / Math.PI);
             let info = op.label;
@@ -416,84 +526,105 @@ export class SymmetryVisualizer {
         // Set atoms to equilibrium
         this.resetAtomPositions();
 
+        this.refreshGhostBondsVisibility();
+        this.drawSymmetryElement(op);
+
         this.crystal.needsRender = true;
         this.crystal.startAnimationLoop();
     }
 
-    setSliderValue(t) {
-        this.sliderValue = Math.max(0, Math.min(1, t));
+    refreshGhostLattice() {
+        if (!this.active) return;
+        this.precomputeOperations();
+        this.populateDropdown();
+        this.createGhostLattice();
+        if (this.currentOpIndex < 0 || this.currentOpIndex >= this.cartesianOps.length) {
+            let firstNonIdentity = this.cartesianOps.findIndex(op => op.label !== 'E (Identity)');
+            this.currentOpIndex = firstNonIdentity >= 0 ? firstNonIdentity : 0;
+            if (this.dropdownEl) this.dropdownEl.val(this.currentOpIndex);
+        }
+        let op = this.cartesianOps[this.currentOpIndex];
+        if (op) {
+            this.applyInterpolatedOperation(op, this.sliderRotValue, this.sliderTransValue);
+            this.drawSymmetryElement(op);
+        }
+        this.refreshGhostBondsVisibility();
+        this.crystal.needsRender = true;
+        this.crystal.startAnimationLoop();
+    }
+
+    refreshGhostBondsVisibility() {
+        if (!this.ghostMeshes) return;
+        let show = this.bondsCheckboxEl ? this.bondsCheckboxEl.is(':checked') : true;
+        for (let mesh of this.ghostMeshes) {
+            if (mesh.name === 'symmetry-ghost-bond') {
+                mesh.visible = show;
+            }
+        }
+        this.crystal.needsRender = true;
+        this.crystal.startAnimationLoop();
+    }
+
+    setSliderValues(tRot, tTrans) {
+        this.sliderRotValue = Math.max(0, Math.min(1, tRot));
+        this.sliderTransValue = Math.max(0, Math.min(1, tTrans));
         if (this.currentOpIndex < 0) return;
 
         let op = this.cartesianOps[this.currentOpIndex];
-        this.applyInterpolatedOperation(op, this.sliderValue);
+        this.applyInterpolatedOperation(op, this.sliderRotValue, this.sliderTransValue);
 
         this.crystal.needsRender = true;
         this.crystal.startAnimationLoop();
     }
 
-    /**
-     * Interpolate atom positions from equilibrium (t=0) to
-     * the symmetry-operated position (t=1).
-     *
-     * For proper rotations: use quaternion SLERP for smooth curved paths.
-     * For improper rotations (inversion, mirrors): use linear interpolation.
-     */
-    applyInterpolatedOperation(op, t) {
+    applyInterpolatedOperation(op, tRot, tTrans) {
         if (!this.crystal.atomobjects || !this.crystal.atompos) return;
 
         let nAtoms = this.crystal.atomobjects.length;
         let center = this.crystal.geometricCenter;
 
-        // Build Three.js matrix for the full operation
-        let R_mat4 = new THREE.Matrix4();
         let quat_full = new THREE.Quaternion();
 
         if (!op.isImproper) {
-            // Proper rotation: SLERP from identity to target quaternion
             let quat_target = new THREE.Quaternion();
             quat_target.setFromAxisAngle(op.axis, op.angle);
-
-            // SLERP: identity → target
-            let quat_identity = new THREE.Quaternion(); // identity
-            quat_full.slerpQuaternions(quat_identity, quat_target, t);
+            let quat_identity = new THREE.Quaternion();
+            quat_full.slerpQuaternions(quat_identity, quat_target, tRot);
         }
 
         for (let i = 0; i < nAtoms; i++) {
-            let eqPos = this.crystal.atompos[i]; // THREE.Vector3 (centered)
-
+            let eqPos = this.crystal.atompos[i];
             let newPos = new THREE.Vector3();
 
+            // 1. Shift to true crystallographic space (where origin is 0,0,0)
+            let truePos = new THREE.Vector3().copy(eqPos).add(center);
+
             if (op.isImproper) {
-                // For inversion/mirror: linear interpolation from r to R·r + t
-                // Compute target position: R_cart · r + t_cart (centered)
-                let rx = eqPos.x, ry = eqPos.y, rz = eqPos.z;
+                // Linear interpolation for improper operations
+                let rx = truePos.x, ry = truePos.y, rz = truePos.z;
                 let R = op.R_cart;
-                let tx = op.t_cart[0], ty = op.t_cart[1], tz = op.t_cart[2];
+                
+                let targetX = R[0][0]*rx + R[0][1]*ry + R[0][2]*rz;
+                let targetY = R[1][0]*rx + R[1][1]*ry + R[1][2]*rz;
+                let targetZ = R[2][0]*rx + R[2][1]*ry + R[2][2]*rz;
 
-                let targetX = R[0][0]*rx + R[0][1]*ry + R[0][2]*rz + tx;
-                let targetY = R[1][0]*rx + R[1][1]*ry + R[1][2]*rz + ty;
-                let targetZ = R[2][0]*rx + R[2][1]*ry + R[2][2]*rz + tz;
-
-                // Linear interpolation
-                newPos.set(
-                    rx + t * (targetX - rx),
-                    ry + t * (targetY - ry),
-                    rz + t * (targetZ - rz)
+                truePos.set(
+                    rx + tRot * (targetX - rx),
+                    ry + tRot * (targetY - ry),
+                    rz + tRot * (targetZ - rz)
                 );
             } else {
-                // Proper rotation: apply interpolated quaternion
-                newPos.copy(eqPos);
-
-                // Also interpolate translation
-                let tVec = new THREE.Vector3(
-                    t * op.t_cart[0],
-                    t * op.t_cart[1],
-                    t * op.t_cart[2]
-                );
-
-                newPos.applyQuaternion(quat_full);
-                newPos.add(tVec);
+                truePos.applyQuaternion(quat_full);
             }
+
+            // 2. Shift back to screen space
+            newPos.copy(truePos).sub(center);
+
+            // 3. Apply translation phase
+            let tx = op.t_cart[0], ty = op.t_cart[1], tz = op.t_cart[2];
+            newPos.x += tTrans * tx;
+            newPos.y += tTrans * ty;
+            newPos.z += tTrans * tz;
 
             // Update atom position
             this.crystal.atomobjects[i].position.copy(newPos);
@@ -611,6 +742,62 @@ export class SymmetryVisualizer {
     }
 
     // ─────────────────────────────────────────────
+    // VISUALIZE SYMMETRY ELEMENTS (Bonus Idea)
+    // ─────────────────────────────────────────────
+
+    drawSymmetryElement(op) {
+        if (this.symElementMesh) {
+            this.crystal.scene.remove(this.symElementMesh);
+            if (this.symElementMesh.geometry) this.symElementMesh.geometry.dispose();
+            if (this.symElementMesh.material) this.symElementMesh.material.dispose();
+            this.symElementMesh = null;
+        }
+
+        if (!op || op.label === 'E (Identity)') return;
+
+        // The physical crystallographic origin is at -geometricCenter in viewer space
+        let center = new THREE.Vector3().copy(this.crystal.geometricCenter).multiplyScalar(-1);
+
+        if (op.label.startsWith('i')) {
+            // Draw Inversion center as a glowing amber dot
+            let geom = new THREE.SphereGeometry(0.2, 16, 16);
+            let mat = new THREE.MeshPhongMaterial({ color: 0xffea00, emissive: 0xaa8800, shininess: 100, transparent: true, opacity: 0.9, depthWrite: false });
+            let mesh = new THREE.Mesh(geom, mat);
+            mesh.position.copy(center);
+            this.symElementMesh = mesh;
+            this.crystal.scene.add(mesh);
+        } else if (op.label.startsWith('σ')) {
+            // Draw Mirror plane as a semi-transparent cyan surface
+            let geom = new THREE.PlaneGeometry(25, 25);
+            let mat = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false });
+            let mesh = new THREE.Mesh(geom, mat);
+            
+            // Align plane with the normal (op.axis)
+            let zAxis = new THREE.Vector3(0, 0, 1);
+            let quaternion = new THREE.Quaternion().setFromUnitVectors(zAxis, op.axis);
+            mesh.quaternion.copy(quaternion);
+            mesh.position.copy(center);
+
+            this.symElementMesh = mesh;
+            this.crystal.scene.add(mesh);
+        } else if (op.label.startsWith('C') || op.label.startsWith('S')) {
+            // Draw Rotation axis as a glowing magenta line/cylinder
+            let geom = new THREE.CylinderGeometry(0.06, 0.06, 50, 12);
+            let mat = new THREE.MeshBasicMaterial({ color: 0xff00ff, transparent: true, opacity: 0.8, depthWrite: false });
+            let mesh = new THREE.Mesh(geom, mat);
+            
+            // Align cylinder with axis
+            let yAxis = new THREE.Vector3(0, 1, 0);
+            let quaternion = new THREE.Quaternion().setFromUnitVectors(yAxis, op.axis);
+            mesh.quaternion.copy(quaternion);
+            mesh.position.copy(center);
+
+            this.symElementMesh = mesh;
+            this.crystal.scene.add(mesh);
+        }
+    }
+
+    // ─────────────────────────────────────────────
     // GHOST LATTICE
     // ─────────────────────────────────────────────
 
@@ -622,18 +809,26 @@ export class SymmetryVisualizer {
         if (!this.crystal.atomobjects || !this.crystal.atompos) return;
         this.removeGhostLattice();
 
-        let ghostMaterial = new THREE.MeshLambertMaterial({
-            color: 0x888888,
-            transparent: true,
-            opacity: 0.25,
-            depthWrite: false
-        });
-
         let sphereGeom = new THREE.SphereGeometry(0.3, 16, 12);
+
+        // Cache materials by atom number to save memory
+        let materialCache = {};
 
         for (let i = 0; i < this.crystal.atompos.length; i++) {
             let pos = this.crystal.atompos[i];
-            let mesh = new THREE.Mesh(sphereGeom, ghostMaterial);
+            let atomNumber = this.crystal.atomobjects[i].atom_number;
+            
+            if (!materialCache[atomNumber]) {
+                let colorHex = this.crystal.getAtomColorHex(atomNumber);
+                materialCache[atomNumber] = new THREE.MeshLambertMaterial({
+                    color: colorHex,
+                    transparent: true,
+                    opacity: 0.3,
+                    depthWrite: false
+                });
+            }
+
+            let mesh = new THREE.Mesh(sphereGeom, materialCache[atomNumber]);
             mesh.position.copy(pos);
             mesh.name = 'symmetry-ghost';
             this.crystal.scene.add(mesh);
@@ -653,8 +848,8 @@ export class SymmetryVisualizer {
 
             for (let i = 0; i < this.crystal.bonds.length; i++) {
                 let bond = this.crystal.bonds[i];
-                let a = this.crystal.atompos[bond.atomIndexA !== undefined ? bond.atomIndexA : 0];
-                let b = this.crystal.atompos[bond.atomIndexB !== undefined ? bond.atomIndexB : 0];
+                let a = bond.a;
+                let b = bond.b;
 
                 // Use stored atom positions for bond endpoints
                 if (!a || !b) continue;
@@ -669,10 +864,23 @@ export class SymmetryVisualizer {
                 bondMesh.scale.set(1, len, 1);
                 let yAxis = new THREE.Vector3(0, 1, 0);
                 bondMesh.quaternion.setFromUnitVectors(yAxis, dir);
-                bondMesh.name = 'symmetry-ghost';
+                bondMesh.name = 'symmetry-ghost-bond';
                 this.crystal.scene.add(bondMesh);
                 this.ghostMeshes.push(bondMesh);
             }
+        }
+
+        // Add emphasis to the primitive unit cell
+        if (this.crystal.phonon && this.crystal.phonon.lat) {
+            let cellObj = createCellLineObject(this.crystal.phonon.lat, this.crystal.geometricCenter, 0x0284c7);
+            cellObj.name = 'symmetry-ghost-cell';
+            
+            // Make the lines slightly thicker and transparent if possible
+            cellObj.material.transparent = true;
+            cellObj.material.opacity = 0.8;
+            
+            this.crystal.scene.add(cellObj);
+            this.ghostMeshes.push(cellObj);
         }
     }
 

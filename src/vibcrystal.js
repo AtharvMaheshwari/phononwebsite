@@ -1506,6 +1506,9 @@ export class VibCrystal extends StructureViewerBase {
         if (notifyAppearanceUpdate && typeof this.onAppearanceUpdated === 'function') {
             this.onAppearanceUpdated();
         }
+        if (typeof this.onStructureRebuilt === 'function') {
+            this.onStructureRebuilt();
+        }
         this.needsRender = true;
         this.startAnimationLoop();
     }

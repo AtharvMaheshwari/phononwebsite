@@ -890,7 +890,7 @@ export class PhononJson {
         let structure = data["structure"];
         this.lat = structure["lattice"]["matrix"];
         let rlat = utils.rec_lat(this.lat);
-        this.repetitions = [3,3,3];
+        this.repetitions = null;
 
         this.atom_pos_car = [];
         this.atom_pos_red = [];
@@ -1015,7 +1015,7 @@ export class PhononJson {
         //lattice
         this.lat = structure["lattice"]["matrix"];
         let rlat = utils.rec_lat(this.lat);
-        this.repetitions = [3,3,3];
+        this.repetitions = null;
 
         this.atom_pos_car = [];
         this.atom_pos_red = [];
