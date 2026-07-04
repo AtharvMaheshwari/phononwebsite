@@ -817,7 +817,11 @@ export class SymmetryVisualizer {
         let reps = this.crystal.phonon && this.crystal.phonon.repetitions ? this.crystal.phonon.repetitions : [1, 1, 1];
         let offsets = [[0, 0, 0]];
 
-        if (this.crystal.phonon && this.crystal.phonon.lat) {
+        // Limit the ghost shell to max 2x2x2 repetitions (8 unit cells) to preserve performance
+        let maxRepetitions = 8;
+        let totalRepetitions = reps[0] * reps[1] * reps[2];
+
+        if (totalRepetitions <= maxRepetitions && this.crystal.phonon && this.crystal.phonon.lat) {
             let lat = this.crystal.phonon.lat;
             // Multiply the primitive lattice vectors by the repetitions to get the supercell vectors
             let v1 = new THREE.Vector3(lat[0][0], lat[0][1], lat[0][2]).multiplyScalar(reps[0]);
