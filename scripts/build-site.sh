@@ -20,6 +20,7 @@ terser build/exciton.js -c -m --source-map "content=build/exciton.js.map,url=exc
 terser build/structure.js -c -m --source-map "content=build/structure.js.map,url=structure.min.js.map" -o build/structure.min.js
 
 cp -r figures css libs data README.md phonon.html exciton.html structure.html favicon.svg favicon.ico build/
+cp src/*.wasm build/ || true
 rm -f build/data/phonondb2017/.gitignore
 cp -r test/fixtures build/test/
 
