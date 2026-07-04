@@ -20,14 +20,14 @@ export async function computeSymmetry(phonon) {
     let pos = phonon.atom_pos_red; // Nx3 array
     let types = phonon.atomic_numbers || phonon.atom_numbers; // array of N ints
     let num_atom = pos.length;
-    let symprec = 1e-5;
+    let symprec = 1e-4; // Increased tolerance for detecting symmetries (useful in case of relaxed lattice structures)
     
     let lat_ptr = spglib._malloc(9 * 8);
     let pos_ptr = spglib._malloc(3 * num_atom * 8);
     let typ_ptr = spglib._malloc(num_atom * 4);
     
-    let rot_ptr = spglib._malloc(48 * 9 * 4);
-    let trans_ptr = spglib._malloc(48 * 3 * 8);
+    let rot_ptr = spglib._malloc(192 * 9 * 4);
+    let trans_ptr = spglib._malloc(192 * 3 * 8);
     
     let flat_lat = new Float64Array(9);
     for (let i=0; i<3; i++) {
@@ -89,6 +89,7 @@ export async function computeSymmetry(phonon) {
     for (let i=0; i<line_breaks.length; i++) {
         let start = line_breaks[i][0];
         let end = line_breaks[i][1];
+        if (start === undefined || end === undefined) continue;
         
         // Find segment little group from midpoint
         let mid_idx = Math.floor((start + end) / 2);
@@ -102,7 +103,7 @@ export async function computeSymmetry(phonon) {
         let lg_rotations = [];
         let lg_translations = [];
         
-        for (let op=0; op<num_sym; op++) {
+        for (let op=0; op<rotations.length; op++) {
             let R = rotations[op];
             
             // R_q = (R^-1)^T
@@ -139,10 +140,108 @@ export async function computeSymmetry(phonon) {
             start: phonon.distances[start],
             end: phonon.distances[end-1],
             rotations: lg_rotations,
-            translations: lg_translations
+            translations: lg_translations,
+            point_group: identifyPointGroupSymbol(lg_rotations)
         });
     }
     
     phonon.segment_point_group_list = segment_point_groups;
     phonon.segment_point_groups = segment_point_groups; // for PhononPropertyCalculator
+    
+    // Now compute the point group for each high-symmetry point
+    let highsym_point_group_map = {};
+    if (phonon.highsym_qpts && phonon.qindex) {
+        for (let dist in phonon.highsym_qpts) {
+            let q_idx = phonon.qindex[dist];
+            if (q_idx === undefined) continue;
+            let q = phonon.kpoints[q_idx];
+            
+            let lg_rotations = [];
+            for (let op=0; op<rotations.length; op++) {
+                let R = rotations[op];
+                let R_inv = mat.matrix_inverse(R);
+                if (!R_inv) continue;
+                let R_q = mat.matrix_transpose(R_inv);
+                let q_rot = [
+                    R_q[0][0]*q[0] + R_q[0][1]*q[1] + R_q[0][2]*q[2],
+                    R_q[1][0]*q[0] + R_q[1][1]*q[1] + R_q[1][2]*q[2],
+                    R_q[2][0]*q[0] + R_q[2][1]*q[1] + R_q[2][2]*q[2]
+                ];
+                let diff = [ q_rot[0] - q[0], q_rot[1] - q[1], q_rot[2] - q[2] ];
+                let is_int = (Math.abs(diff[0] - Math.round(diff[0])) < symprec) &&
+                             (Math.abs(diff[1] - Math.round(diff[1])) < symprec) &&
+                             (Math.abs(diff[2] - Math.round(diff[2])) < symprec);
+                if (is_int) lg_rotations.push(R);
+            }
+            highsym_point_group_map[dist] = identifyPointGroupSymbol(lg_rotations);
+        }
+    }
+    phonon.highsym_point_group_map = highsym_point_group_map;
+    
+    // Store full crystal operations for future 3D animations
+    phonon.crystal_symmetries = {
+        rotations: rotations,
+        translations: translations
+    };
+}
+
+export function identifyPointGroupSymbol(rotations) {
+    let counts = { E:0, C2:0, C3:0, C4:0, C6:0, i:0, m:0, S3:0, S4:0, S6:0 };
+    for (let R of rotations) {
+        let det = Math.round(R[0][0]*(R[1][1]*R[2][2]-R[2][1]*R[1][2]) - R[0][1]*(R[1][0]*R[2][2]-R[1][2]*R[2][0]) + R[0][2]*(R[1][0]*R[2][1]-R[1][1]*R[2][0]));
+        let tr = Math.round(R[0][0] + R[1][1] + R[2][2]);
+        
+        if (det === 1) {
+            if (tr === 3) counts.E++;
+            else if (tr === -1) counts.C2++;
+            else if (tr === 0) counts.C3++;
+            else if (tr === 1) counts.C4++;
+            else if (tr === 2) counts.C6++;
+        } else if (det === -1) {
+            if (tr === -3) counts.i++;
+            else if (tr === 1) counts.m++;
+            else if (tr === -2) counts.S3++;
+            else if (tr === -1) counts.S4++;
+            else if (tr === 0) counts.S6++;
+        }
+    }
+    
+    const sig = `${counts.E},${counts.C2},${counts.C3},${counts.C4},${counts.C6},${counts.i},${counts.m},${counts.S3},${counts.S4},${counts.S6}`;
+    
+    const groups = {
+        "1,0,0,0,0,0,0,0,0,0": "C1",
+        "1,0,0,0,0,1,0,0,0,0": "Ci",
+        "1,0,0,0,0,0,1,0,0,0": "Cs",
+        "1,1,0,0,0,0,0,0,0,0": "C2",
+        "1,0,2,0,0,0,0,0,0,0": "C3",
+        "1,1,0,2,0,0,0,0,0,0": "C4",
+        "1,1,0,0,0,0,0,0,2,0": "S4",
+        "1,1,2,0,2,0,0,0,0,0": "C6",
+        "1,0,2,0,0,0,1,2,0,0": "C3h",
+        "1,0,2,0,0,1,0,0,0,2": "S6",
+        "1,1,0,0,0,1,1,0,0,0": "C2h",
+        "1,3,0,0,0,0,0,0,0,0": "D2",
+        "1,1,0,0,0,0,2,0,0,0": "C2v",
+        "1,1,0,2,0,1,1,0,2,0": "C4h",
+        "1,5,0,2,0,0,0,0,0,0": "D4",
+        "1,1,0,2,0,0,4,0,0,0": "C4v",
+        "1,3,0,0,0,0,2,0,2,0": "D2d",
+        "1,3,0,0,0,1,3,0,0,0": "D2h",
+        "1,1,2,0,2,1,1,2,0,2": "C6h",
+        "1,7,2,0,2,0,0,0,0,0": "D6",
+        "1,1,2,0,2,0,6,0,0,0": "C6v",
+        "1,3,2,0,0,0,4,2,0,0": "D3h",
+        "1,3,2,0,0,1,3,0,0,2": "D3d",
+        "1,3,2,0,0,0,0,0,0,0": "D3",
+        "1,0,2,0,0,0,3,0,0,0": "C3v",
+        "1,3,8,0,0,0,0,0,0,0": "T",
+        "1,3,8,0,0,1,3,0,0,8": "Th",
+        "1,9,8,6,0,0,0,0,0,0": "O",
+        "1,3,8,0,0,0,6,0,6,0": "Td",
+        "1,5,0,2,0,1,5,0,2,0": "D4h",
+        "1,7,2,0,2,1,7,2,0,2": "D6h",
+        "1,9,8,6,0,1,9,0,6,8": "Oh"
+    };
+    
+    return groups[sig] || "C1"; // fallback to C1 if somehow signature doesn't match
 }

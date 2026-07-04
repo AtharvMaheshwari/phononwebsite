@@ -39,9 +39,14 @@ export class PhononHighcharts {
             return function() {
                 let dist = this.value;
                 // Check if this tick is at a high-symmetry point
-                if (phonon.highsym_point_group_map && phonon.highsym_point_group_map[dist]) {
-                    let pg = phonon.highsym_point_group_map[dist];
-                    return '<span style="color:#0066cc; font-size:11px; font-weight:600;">' + pg + '</span>';
+                if (phonon.highsym_point_group_map) {
+                    let tol = 1e-6;
+                    for (let d in phonon.highsym_point_group_map) {
+                        if (Math.abs(dist - Number(d)) < tol) {
+                            let pg = phonon.highsym_point_group_map[d];
+                            return '<span style="color:#0066cc; font-size:11px; font-weight:600;">' + pg + '</span>';
+                        }
+                    }
                 }
                 // Check if this tick is a segment midpoint
                 if (phonon.segment_point_group_list) {
@@ -774,6 +779,55 @@ export class PhononHighcharts {
         }
         this.chart = globalThis.Highcharts.chart(this.container[0], this.HighchartsOptions);
         this.refreshLegendAndWeights();
+        this.addGlossaryButton();
+    }
+
+    addGlossaryButton() {
+        if (!this.container) return;
+        let parent = this.container.parent();
+        if (parent.find('#sym-glossary-btn').length > 0) return;
+
+        let glossaryHtml = `
+            <div id="sym-glossary-btn" style="position:absolute; top: 10px; left: 45px; z-index: 100;">
+                <div class="sym-glossary-icon" style="
+                    width: 24px; height: 24px; border-radius: 50%;
+                    background: rgba(2, 132, 199, 0.8); color: white;
+                    display: flex; justify-content: center; align-items: center;
+                    font-weight: bold; font-size: 14px; cursor: help;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                    backdrop-filter: blur(4px);
+                ">?</div>
+                <div class="sym-glossary-content" style="
+                    display: none; position: absolute; top: 30px; left: 0;
+                    width: 320px; padding: 15px; border-radius: 8px;
+                    background: rgba(255, 255, 255, 0.7);
+                    backdrop-filter: blur(10px);
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                    border: 1px solid rgba(255,255,255,0.5);
+                    font-size: 12px; color: #333; line-height: 1.5;
+                ">
+                    <h4 style="margin-top:0; color:#0284c7; border-bottom:1px solid #ccc; padding-bottom:5px;">Symmetry Glossary</h4>
+                    <b>Cₙ</b> : n-fold cyclic rotation axis<br>
+                    <b>Sₙ</b> : n-fold improper rotation (rotation + reflection)<br>
+                    <b>Dₙ</b> : Dihedral (Cₙ plus n perpendicular C₂ axes)<br>
+                    <b>T, O, I</b> : Tetrahedral, Octahedral, Icosahedral symmetry<br>
+                    <b>i</b> : Inversion center<br>
+                    <b>h</b> : horizontal mirror plane (⊥ to principal axis)<br>
+                    <b>v</b> : vertical mirror plane (|| to principal axis)<br>
+                    <b>d</b> : diagonal mirror plane (bisects C₂ axes)<br>
+                    <br>
+                    <i>Example:</i> <b>D₄ₕ</b> has a 4-fold rotation axis, 4 perpendicular 2-fold axes, and a horizontal mirror plane.
+                </div>
+            </div>
+        `;
+        
+        parent.css('position', 'relative');
+        parent.append(glossaryHtml);
+        
+        parent.find('.sym-glossary-icon').hover(
+            function() { $(this).siblings('.sym-glossary-content').stop(true,true).fadeIn(200); },
+            function() { $(this).siblings('.sym-glossary-content').stop(true,true).fadeOut(200); }
+        );
     }
 
     isGammaLabel(label) {

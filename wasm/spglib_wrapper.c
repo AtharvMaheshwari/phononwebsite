@@ -14,11 +14,11 @@ int get_symmetry(
     int* types, // num_atom ints
     int num_atom,
     double symprec,
-    int* rotations_out, // buffer for 48 * 9 ints
-    double* translations_out // buffer for 48 * 3 doubles
+    int* rotations_out, // buffer for 192 * 9 ints
+    double* translations_out // buffer for 192 * 3 doubles
 ) {
-    // Spglib expects max_size = 48 for normal point groups (192 for magnetic but we ignore)
-    int max_size = 48;
+    // Spglib expects max_size = 192 for crystals with centering translations (e.g. FCC)
+    int max_size = 192;
 
     int size_sym = spg_get_symmetry(
         (int (*)[3][3])rotations_out,
