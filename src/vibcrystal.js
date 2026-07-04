@@ -114,6 +114,7 @@ export class VibCrystal extends StructureViewerBase {
         this.arrows = false;
         this.cell = false;
         this.paused = false;
+        this.symmetryAnimationActive = false;
         this.initialized = false;
 
         this.container = container;
@@ -1711,7 +1712,7 @@ export class VibCrystal extends StructureViewerBase {
         let phaseIm = this.amplitude * Math.sin(phaseAngle);
         let v = new THREE.Vector3();
 
-        if (!this.paused) {
+        if (!this.paused && !this.symmetryAnimationActive) {
 
             //update positions according to vibrational modes
             for (let i=0; i<this.atomobjects.length; i++) {

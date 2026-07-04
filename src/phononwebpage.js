@@ -523,6 +523,9 @@ export class PhononWebpage {
         /*
         Fuunction to be called once the file is loaded
         */
+        if (typeof this.onMaterialChanged === 'function') {
+            this.onMaterialChanged();
+        }
         this.name = utils.format_formula_html(this.phonon.name);
         if (this.visualizer) {
             this.visualizer.modeScaleAutoInitialized = false;

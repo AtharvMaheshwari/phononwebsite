@@ -9,6 +9,7 @@ import { Complex } from './legacycomplex.js';
 
 // Import your own classes (adjust the path as needed)
 import { VibCrystal, PhononHighcharts, PhononWebpage } from './phononwebsite.js';
+import { SymmetryVisualizer } from './symmetryvisualizer.js';
 
 if (THREE.ColorManagement && typeof THREE.ColorManagement.enabled === 'boolean') {
     THREE.ColorManagement.enabled = false;
@@ -112,6 +113,18 @@ v.setAdvancedAppearanceControls(
     $('#appearance_reset_vectors_button'),
 );
 v.setAppearanceUpdatedCallback(() => p.refreshAppearanceUI());
+
+// Wire up the Symmetry Visualizer
+const symViz = new SymmetryVisualizer(v);
+symViz.bindDOM(
+    $('#sym-animator-panel'),
+    $('#sym-op-select'),
+    $('#sym-slider'),
+    $('#sym-op-label'),
+    $('#sym-animator-toggle')
+);
+// Deactivate symmetry animator when material changes
+p.onMaterialChanged = () => symViz.onMaterialChanged();
 
 // check if webgl is available
 if ( ! Detector.webgl ) {

@@ -262,7 +262,54 @@
             <div style="display: flex; flex-direction: column; flex: 1; min-width: 0; height: 100%;">
                 <div class="material-name"><h1 id="name">Material</h1></div>
                 <div class="flex-container" style="flex: 1; min-height: 0; height: 100%;">
-                    <div class="flex-vibcrystal" style="height: 100%;"><div id="vibcrystal"></div></div>
+                    <div class="flex-vibcrystal" style="height: 100%; position: relative;">
+                        <div id="vibcrystal"></div>
+
+                        <!-- Symmetry Animator Toggle Button -->
+                        <button id="sym-animator-toggle" type="button" style="
+                            position: absolute; top: 8px; right: 8px; z-index: 120;
+                            padding: 5px 12px; border: none; border-radius: 6px;
+                            background: rgba(2, 132, 199, 0.9); color: white;
+                            font-size: 12px; font-weight: 600; cursor: pointer;
+                            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+                            backdrop-filter: blur(4px);
+                            transition: background 0.2s, transform 0.1s;
+                        ">&#x269B; Symmetry</button>
+
+                        <!-- Symmetry Animator Panel (hidden by default) -->
+                        <div id="sym-animator-panel" style="
+                            display: none; position: absolute; top: 40px; right: 8px; z-index: 110;
+                            width: 300px; padding: 12px; border-radius: 8px;
+                            background: rgba(255, 255, 255, 0.85);
+                            backdrop-filter: blur(12px);
+                            box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+                            border: 1px solid rgba(255,255,255,0.6);
+                            font-family: 'Inter', Arial, sans-serif;
+                            font-size: 12px; color: #1e293b;
+                        ">
+                            <div style="font-weight: 700; font-size: 13px; color: #0284c7; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;">
+                                Symmetry Operations
+                            </div>
+                            <label for="sym-op-select" style="font-weight: 600; font-size: 11px; color: #475569;">Operation:</label>
+                            <select id="sym-op-select" style="
+                                width: 100%; margin: 4px 0 10px 0; padding: 5px 8px;
+                                border: 1px solid #cbd5e1; border-radius: 5px;
+                                background: #f8fafc; font-size: 12px; color: #1e293b;
+                                cursor: pointer; outline: none;
+                            "></select>
+
+                            <label for="sym-slider" style="font-weight: 600; font-size: 11px; color: #475569;">Animation (0 &#x2192; 1):</label>
+                            <input id="sym-slider" type="range" min="0" max="100" value="0" step="1" style="
+                                width: 100%; margin: 4px 0 8px 0; accent-color: #0284c7;
+                            ">
+
+                            <div id="sym-op-label" style="
+                                font-size: 11px; color: #64748b; line-height: 1.4;
+                                min-height: 28px; padding: 4px 0;
+                            ">Select an operation to animate.</div>
+                        </div>
+                    </div>
+
             <div class="flex-highcharts" style="height: 100%;">
                 <div id="highcharts"></div>
                 <div id="plot_properties_panel" style="background: rgba(255, 255, 255, 0.95); padding: 10px 15px; border-top: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 8px; font-family: 'Inter', Arial, sans-serif;">
