@@ -530,10 +530,10 @@ export class PhononWebpage {
         if (this.visualizer) {
             this.visualizer.modeScaleAutoInitialized = false;
         }
-        if (this.phonon.repetitions) {
+        let n = this.phonon.natoms;
+        if (n <= 10 && this.phonon.repetitions) {
             this.setRepetitions(this.phonon.repetitions);
         } else {
-            let n = this.phonon.natoms;
             if (n > 20) {
                 this.setRepetitions([1,1,1]);
             } else if (n > 10) {
