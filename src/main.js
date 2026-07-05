@@ -126,6 +126,7 @@ symViz.bindDOM(
     $('#sym-slider-rot-label'),
     $('#sym-op-label'),
     $('#sym-animator-toggle'),
+    $('#sym-show-ghost-atoms'),
     $('#sym-show-bonds')
 );
 // Deactivate symmetry animator when material changes

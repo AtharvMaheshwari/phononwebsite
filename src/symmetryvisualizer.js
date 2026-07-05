@@ -48,6 +48,7 @@ export class SymmetryVisualizer {
         this.panelEl = null;
         this.labelEl = null;
         this.toggleBtn = null;
+        this.ghostAtomsCheckboxEl = null;
         this.bondsCheckboxEl = null;
 
         // Hook into structure updates (e.g. changing cell repetitions)
@@ -58,7 +59,7 @@ export class SymmetryVisualizer {
     // DOM BINDING
     // ─────────────────────────────────────────────
 
-    bindDOM(panelEl, dropdownEl, sliderRotEl, sliderTransEl, rotContainer, transContainer, rotLabel, labelEl, toggleBtn, bondsCheckboxEl) {
+    bindDOM(panelEl, dropdownEl, sliderRotEl, sliderTransEl, rotContainer, transContainer, rotLabel, labelEl, toggleBtn, ghostAtomsCheckboxEl, bondsCheckboxEl) {
         this.panelEl = panelEl;
         this.dropdownEl = dropdownEl;
         this.sliderRotEl = sliderRotEl;
@@ -68,6 +69,7 @@ export class SymmetryVisualizer {
         this.sliderRotLabel = rotLabel;
         this.labelEl = labelEl;
         this.toggleBtn = toggleBtn;
+        this.ghostAtomsCheckboxEl = ghostAtomsCheckboxEl;
         this.bondsCheckboxEl = bondsCheckboxEl;
 
         // Toggle button shows/hides the panel
@@ -105,6 +107,20 @@ export class SymmetryVisualizer {
             });
         }
         
+        // Checkbox: toggle ghost atoms
+        if (this.ghostAtomsCheckboxEl) {
+            this.ghostAtomsCheckboxEl.on('change', () => {
+                let isChecked = this.ghostAtomsCheckboxEl.is(':checked');
+                if (!isChecked && this.bondsCheckboxEl) {
+                    this.bondsCheckboxEl.prop('checked', false);
+                    this.bondsCheckboxEl.prop('disabled', true);
+                } else if (this.bondsCheckboxEl) {
+                    this.bondsCheckboxEl.prop('disabled', false);
+                }
+                this.refreshGhostLattice();
+            });
+        }
+
         // Checkbox: toggle ghost bonds
         if (this.bondsCheckboxEl) {
             this.bondsCheckboxEl.on('change', () => {
@@ -807,44 +823,25 @@ export class SymmetryVisualizer {
      */
     createGhostLattice() {
         if (!this.crystal.atomobjects || !this.crystal.atompos) return;
+        
         this.removeGhostLattice();
 
-        let sphereGeom = new THREE.SphereGeometry(0.3, 16, 12);
-
-        // Cache materials by atom number to save memory
-        let materialCache = {};
-
-        let reps = this.crystal.phonon && this.crystal.phonon.repetitions ? this.crystal.phonon.repetitions : [1, 1, 1];
-        let offsets = [[0, 0, 0]];
-
-        // Limit the ghost shell to max 2x2x2 repetitions (8 unit cells) to preserve performance
-        let maxRepetitions = 8;
-        let totalRepetitions = reps[0] * reps[1] * reps[2];
-
-        if (totalRepetitions <= maxRepetitions && this.crystal.phonon && this.crystal.phonon.lat) {
-            let lat = this.crystal.phonon.lat;
-            // Multiply the primitive lattice vectors by the repetitions to get the supercell vectors
-            let v1 = new THREE.Vector3(lat[0][0], lat[0][1], lat[0][2]).multiplyScalar(reps[0]);
-            let v2 = new THREE.Vector3(lat[1][0], lat[1][1], lat[1][2]).multiplyScalar(reps[1]);
-            let v3 = new THREE.Vector3(lat[2][0], lat[2][1], lat[2][2]).multiplyScalar(reps[2]);
-            
-            // Add 26 neighboring supercells
-            for (let i = -1; i <= 1; i++) {
-                for (let j = -1; j <= 1; j++) {
-                    for (let k = -1; k <= 1; k++) {
-                        if (i === 0 && j === 0 && k === 0) continue;
-                        let offset = new THREE.Vector3()
-                            .addScaledVector(v1, i)
-                            .addScaledVector(v2, j)
-                            .addScaledVector(v3, k);
-                        offsets.push([offset.x, offset.y, offset.z]);
-                    }
-                }
-            }
+        if (this.ghostAtomsCheckboxEl && !this.ghostAtomsCheckboxEl.is(':checked')) {
+            return;
         }
 
+        if (this.currentOpIndex < 0) return;
+        let op = this.cartesianOps[this.currentOpIndex];
+        let R = op.R_cart;
+        let t = op.t_cart;
+        let center = this.crystal.geometricCenter;
+
+        let sphereGeom = new THREE.SphereGeometry(0.3, 16, 12);
+        let materialCache = {};
+
+        // 1. Ghost Atoms at final positions
         for (let i = 0; i < this.crystal.atompos.length; i++) {
-            let pos = this.crystal.atompos[i];
+            let eqPos = this.crystal.atompos[i];
             let atomNumber = this.crystal.atomobjects[i].atom_number;
             
             if (!materialCache[atomNumber]) {
@@ -855,27 +852,22 @@ export class SymmetryVisualizer {
                     opacity: 0.3,
                     depthWrite: false
                 });
-                materialCache[atomNumber + '_shell'] = new THREE.MeshLambertMaterial({
-                    color: colorHex,
-                    transparent: true,
-                    opacity: 0.1, // lowered opacity for boundary shell
-                    depthWrite: false
-                });
             }
 
-            for (let offset of offsets) {
-                let isCenter = (offset[0] === 0 && offset[1] === 0 && offset[2] === 0);
-                let mat = isCenter ? materialCache[atomNumber] : materialCache[atomNumber + '_shell'];
-                
-                let mesh = new THREE.Mesh(sphereGeom, mat);
-                mesh.position.set(pos.x + offset[0], pos.y + offset[1], pos.z + offset[2]);
-                mesh.name = 'symmetry-ghost';
-                this.crystal.scene.add(mesh);
-                this.ghostMeshes.push(mesh);
-            }
+            let truePos = new THREE.Vector3().copy(eqPos).add(center);
+            let targetX = R[0][0]*truePos.x + R[0][1]*truePos.y + R[0][2]*truePos.z + t[0];
+            let targetY = R[1][0]*truePos.x + R[1][1]*truePos.y + R[1][2]*truePos.z + t[1];
+            let targetZ = R[2][0]*truePos.x + R[2][1]*truePos.y + R[2][2]*truePos.z + t[2];
+            let finalPos = new THREE.Vector3(targetX, targetY, targetZ).sub(center);
+
+            let mesh = new THREE.Mesh(sphereGeom, materialCache[atomNumber]);
+            mesh.position.copy(finalPos);
+            mesh.name = 'symmetry-ghost';
+            this.crystal.scene.add(mesh);
+            this.ghostMeshes.push(mesh);
         }
 
-        // Ghost bonds
+        // 2. Ghost Bonds at final positions
         if (this.crystal.bonds && this.crystal.bonds.length > 0) {
             let bondMat = new THREE.MeshLambertMaterial({
                 color: 0x666666,
@@ -883,19 +875,27 @@ export class SymmetryVisualizer {
                 opacity: 0.15,
                 depthWrite: false
             });
-
             let bondGeom = new THREE.CylinderGeometry(0.06, 0.06, 1, 6);
 
             for (let i = 0; i < this.crystal.bonds.length; i++) {
                 let bond = this.crystal.bonds[i];
-                let a = bond.a;
-                let b = bond.b;
+                if (!bond.a || !bond.b) continue;
 
-                // Use stored atom positions for bond endpoints
-                if (!a || !b) continue;
+                // Transform endpoints
+                let trueA = new THREE.Vector3().copy(bond.a).add(center);
+                let targetAX = R[0][0]*trueA.x + R[0][1]*trueA.y + R[0][2]*trueA.z + t[0];
+                let targetAY = R[1][0]*trueA.x + R[1][1]*trueA.y + R[1][2]*trueA.z + t[1];
+                let targetAZ = R[2][0]*trueA.x + R[2][1]*trueA.y + R[2][2]*trueA.z + t[2];
+                let finalA = new THREE.Vector3(targetAX, targetAY, targetAZ).sub(center);
 
-                let midpoint = new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5);
-                let dir = new THREE.Vector3().subVectors(b, a);
+                let trueB = new THREE.Vector3().copy(bond.b).add(center);
+                let targetBX = R[0][0]*trueB.x + R[0][1]*trueB.y + R[0][2]*trueB.z + t[0];
+                let targetBY = R[1][0]*trueB.x + R[1][1]*trueB.y + R[1][2]*trueB.z + t[1];
+                let targetBZ = R[2][0]*trueB.x + R[2][1]*trueB.y + R[2][2]*trueB.z + t[2];
+                let finalB = new THREE.Vector3(targetBX, targetBY, targetBZ).sub(center);
+
+                let midpoint = new THREE.Vector3().addVectors(finalA, finalB).multiplyScalar(0.5);
+                let dir = new THREE.Vector3().subVectors(finalB, finalA);
                 let len = dir.length();
                 dir.normalize();
 

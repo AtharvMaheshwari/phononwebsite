@@ -1463,6 +1463,9 @@ export class VibCrystal extends StructureViewerBase {
         this.phonon     = phononweb.phonon;
         this.vibrations = phononweb.vibrations;
         this.atoms      = phononweb.atoms;
+        this.nx         = parseInt(phononweb.nx) || 1;
+        this.ny         = parseInt(phononweb.ny) || 1;
+        this.nz         = parseInt(phononweb.nz) || 1;
         this.captureK   = Number(phononweb.k);
         this.captureN   = Number(phononweb.n);
         this.vibrationComponents = this.vibrations.map((v) => [
