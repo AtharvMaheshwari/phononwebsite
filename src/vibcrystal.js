@@ -1460,6 +1460,7 @@ export class VibCrystal extends StructureViewerBase {
             3. phonon
         */
 
+        this.phononweb  = phononweb;
         this.phonon     = phononweb.phonon;
         this.vibrations = phononweb.vibrations;
         this.atoms      = phononweb.atoms;

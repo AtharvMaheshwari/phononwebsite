@@ -474,17 +474,79 @@ export class SymmetryVisualizer {
         if (!this.dropdownEl) return;
         this.dropdownEl.empty();
 
+        let q_cart = null;
+        let lat = null;
+        if (this.crystal && this.crystal.phononweb && this.crystal.phononweb.phonon) {
+            let k_idx = this.crystal.phononweb.k;
+            if (this.crystal.phononweb.phonon.kpoints && this.crystal.phononweb.phonon.kpoints[k_idx]) {
+                let q = this.crystal.phononweb.phonon.kpoints[k_idx];
+                lat = this.crystal.phononweb.phonon.lat;
+                
+                // Calculate reciprocal lattice vectors b1, b2, b3 without 2pi factor
+                // b_i dot a_j = delta_ij
+                let a1 = lat[0], a2 = lat[1], a3 = lat[2];
+                let b1 = mat.vec_cross(a2, a3);
+                let b2 = mat.vec_cross(a3, a1);
+                let b3 = mat.vec_cross(a1, a2);
+                let v = mat.vec_dot(a1, b1);
+                b1 = mat.vec_scale(b1, 1/v);
+                b2 = mat.vec_scale(b2, 1/v);
+                b3 = mat.vec_scale(b3, 1/v);
+                
+                // Cartesian q
+                q_cart = [
+                    q[0]*b1[0] + q[1]*b2[0] + q[2]*b3[0],
+                    q[0]*b1[1] + q[1]*b2[1] + q[2]*b3[1],
+                    q[0]*b1[2] + q[1]*b2[2] + q[2]*b3[2]
+                ];
+            }
+        }
+
+        let validOpsCount = 0;
+
         // Group operations by type for a cleaner UI
         for (let i = 0; i < this.cartesianOps.length; i++) {
             let op = this.cartesianOps[i];
             if (op.label === 'E (Identity)') continue; // Skip identity operation
             
+            if (q_cart && lat) {
+                // R_cart * q_cart
+                let Rq_cart = [
+                    op.R_cart[0][0]*q_cart[0] + op.R_cart[0][1]*q_cart[1] + op.R_cart[0][2]*q_cart[2],
+                    op.R_cart[1][0]*q_cart[0] + op.R_cart[1][1]*q_cart[1] + op.R_cart[1][2]*q_cart[2],
+                    op.R_cart[2][0]*q_cart[0] + op.R_cart[2][1]*q_cart[1] + op.R_cart[2][2]*q_cart[2]
+                ];
+                let dq_cart = [
+                    Rq_cart[0] - q_cart[0],
+                    Rq_cart[1] - q_cart[1],
+                    Rq_cart[2] - q_cart[2]
+                ];
+                
+                // Check if dq_cart is a reciprocal lattice vector
+                let G_frac = [
+                    mat.vec_dot(dq_cart, lat[0]),
+                    mat.vec_dot(dq_cart, lat[1]),
+                    mat.vec_dot(dq_cart, lat[2])
+                ];
+                
+                let isInteger = (val) => Math.abs(val - Math.round(val)) < 1e-3;
+                if (!isInteger(G_frac[0]) || !isInteger(G_frac[1]) || !isInteger(G_frac[2])) {
+                    continue; // Skip operations not in the little group
+                }
+            }
+            
+            validOpsCount++;
+
             let angleDeg = Math.round(op.angle * 180 / Math.PI);
             let displayLabel = `#${i}: ${op.label}`;
             if (!op.isImproper && angleDeg > 0) {
                 displayLabel += ` [${angleDeg}°]`;
             }
             this.dropdownEl.append(`<option value="${i}">${displayLabel}</option>`);
+        }
+        
+        if (validOpsCount === 0) {
+            this.dropdownEl.append(`<option value="-1">No applicable operations for this mode</option>`);
         }
     }
 
@@ -553,17 +615,38 @@ export class SymmetryVisualizer {
         if (!this.active) return;
         this.precomputeOperations();
         this.populateDropdown();
-        this.createGhostLattice();
-        if (this.currentOpIndex < 0 || this.currentOpIndex >= this.cartesianOps.length) {
-            let firstNonIdentity = this.cartesianOps.findIndex(op => op.label !== 'E (Identity)');
-            this.currentOpIndex = firstNonIdentity >= 0 ? firstNonIdentity : 0;
-            if (this.dropdownEl) this.dropdownEl.val(this.currentOpIndex);
+        
+        let validOps = [];
+        if (this.dropdownEl) {
+            // Need to handle standard DOM element or jQuery depending on what dropdownEl is
+            let options = this.dropdownEl[0].options;
+            for (let i = 0; i < options.length; i++) {
+                let val = parseInt(options[i].value, 10);
+                if (val >= 0) validOps.push(val);
+            }
         }
-        let op = this.cartesianOps[this.currentOpIndex];
-        if (op) {
-            this.applyInterpolatedOperation(op, this.sliderRotValue, this.sliderTransValue);
-            this.drawSymmetryElement(op);
+
+        if (validOps.length > 0 && !validOps.includes(this.currentOpIndex)) {
+            this.currentOpIndex = validOps[0];
+        } else if (validOps.length === 0) {
+            this.currentOpIndex = -1;
         }
+
+        if (this.dropdownEl && this.currentOpIndex >= 0) {
+            this.dropdownEl.val(this.currentOpIndex);
+        }
+
+        if (this.currentOpIndex >= 0) {
+            this.createGhostLattice();
+            let op = this.cartesianOps[this.currentOpIndex];
+            if (op) {
+                this.applyInterpolatedOperation(op, this.sliderRotValue, this.sliderTransValue);
+                this.drawSymmetryElement(op);
+            }
+        } else {
+            this.removeGhostLattice();
+        }
+
         this.refreshGhostBondsVisibility();
         this.crystal.needsRender = true;
         this.crystal.startAnimationLoop();
