@@ -94426,10 +94426,13 @@ function getReasonableRepetitions(natoms,lat) {
     in which directions the repetitions are made
     */
 
-    if (natoms <= 4)                              { return [3,3,3]; }
-    if (natoms > 4 && natoms <= 15)              { return [2,2,2]; }
-    if (natoms > 15 && natoms <= 50)             { return [2,2,1]; }
-    return [1,1,1];
+    if (natoms <= 10) { 
+        return [3, 3, 3]; 
+    } else if (natoms <= 20) { 
+        return [2, 2, 2]; 
+    } else { 
+        return [1, 1, 1]; 
+    }
 
 }
 
@@ -99508,9 +99511,13 @@ class VibCrystal extends StructureViewerBase {
             3. phonon
         */
 
+        this.phononweb  = phononweb;
         this.phonon     = phononweb.phonon;
         this.vibrations = phononweb.vibrations;
         this.atoms      = phononweb.atoms;
+        this.nx         = parseInt(phononweb.nx) || 1;
+        this.ny         = parseInt(phononweb.ny) || 1;
+        this.nz         = parseInt(phononweb.nz) || 1;
         this.captureK   = Number(phononweb.k);
         this.captureN   = Number(phononweb.n);
         this.vibrationComponents = this.vibrations.map((v) => [
@@ -111599,10 +111606,10 @@ class PhononWebpage {
         if (this.visualizer) {
             this.visualizer.modeScaleAutoInitialized = false;
         }
-        if (this.phonon.repetitions) {
+        let n = this.phonon.natoms;
+        if (n <= 10 && this.phonon.repetitions) {
             this.setRepetitions(this.phonon.repetitions);
         } else {
-            let n = this.phonon.natoms;
             if (n > 20) {
                 this.setRepetitions([1,1,1]);
             } else if (n > 10) {
@@ -112356,6 +112363,7 @@ class SymmetryVisualizer {
         this.panelEl = null;
         this.labelEl = null;
         this.toggleBtn = null;
+        this.ghostAtomsCheckboxEl = null;
         this.bondsCheckboxEl = null;
 
         // Hook into structure updates (e.g. changing cell repetitions)
@@ -112366,7 +112374,7 @@ class SymmetryVisualizer {
     // DOM BINDING
     // ─────────────────────────────────────────────
 
-    bindDOM(panelEl, dropdownEl, sliderRotEl, sliderTransEl, rotContainer, transContainer, rotLabel, labelEl, toggleBtn, bondsCheckboxEl) {
+    bindDOM(panelEl, dropdownEl, sliderRotEl, sliderTransEl, rotContainer, transContainer, rotLabel, labelEl, toggleBtn, ghostAtomsCheckboxEl, bondsCheckboxEl) {
         this.panelEl = panelEl;
         this.dropdownEl = dropdownEl;
         this.sliderRotEl = sliderRotEl;
@@ -112376,6 +112384,7 @@ class SymmetryVisualizer {
         this.sliderRotLabel = rotLabel;
         this.labelEl = labelEl;
         this.toggleBtn = toggleBtn;
+        this.ghostAtomsCheckboxEl = ghostAtomsCheckboxEl;
         this.bondsCheckboxEl = bondsCheckboxEl;
 
         // Toggle button shows/hides the panel
@@ -112413,6 +112422,20 @@ class SymmetryVisualizer {
             });
         }
         
+        // Checkbox: toggle ghost atoms
+        if (this.ghostAtomsCheckboxEl) {
+            this.ghostAtomsCheckboxEl.on('change', () => {
+                let isChecked = this.ghostAtomsCheckboxEl.is(':checked');
+                if (!isChecked && this.bondsCheckboxEl) {
+                    this.bondsCheckboxEl.prop('checked', false);
+                    this.bondsCheckboxEl.prop('disabled', true);
+                } else if (this.bondsCheckboxEl) {
+                    this.bondsCheckboxEl.prop('disabled', false);
+                }
+                this.refreshGhostLattice();
+            });
+        }
+
         // Checkbox: toggle ghost bonds
         if (this.bondsCheckboxEl) {
             this.bondsCheckboxEl.on('change', () => {
@@ -112766,17 +112789,79 @@ class SymmetryVisualizer {
         if (!this.dropdownEl) return;
         this.dropdownEl.empty();
 
+        let q_cart = null;
+        let lat = null;
+        if (this.crystal && this.crystal.phononweb && this.crystal.phononweb.phonon) {
+            let k_idx = this.crystal.phononweb.k;
+            if (this.crystal.phononweb.phonon.kpoints && this.crystal.phononweb.phonon.kpoints[k_idx]) {
+                let q = this.crystal.phononweb.phonon.kpoints[k_idx];
+                lat = this.crystal.phononweb.phonon.lat;
+                
+                // Calculate reciprocal lattice vectors b1, b2, b3 without 2pi factor
+                // b_i dot a_j = delta_ij
+                let a1 = lat[0], a2 = lat[1], a3 = lat[2];
+                let b1 = vec_cross(a2, a3);
+                let b2 = vec_cross(a3, a1);
+                let b3 = vec_cross(a1, a2);
+                let v = vec_dot(a1, b1);
+                b1 = vec_scale(b1, 1/v);
+                b2 = vec_scale(b2, 1/v);
+                b3 = vec_scale(b3, 1/v);
+                
+                // Cartesian q
+                q_cart = [
+                    q[0]*b1[0] + q[1]*b2[0] + q[2]*b3[0],
+                    q[0]*b1[1] + q[1]*b2[1] + q[2]*b3[1],
+                    q[0]*b1[2] + q[1]*b2[2] + q[2]*b3[2]
+                ];
+            }
+        }
+
+        let validOpsCount = 0;
+
         // Group operations by type for a cleaner UI
         for (let i = 0; i < this.cartesianOps.length; i++) {
             let op = this.cartesianOps[i];
             if (op.label === 'E (Identity)') continue; // Skip identity operation
             
+            if (q_cart && lat) {
+                // R_cart * q_cart
+                let Rq_cart = [
+                    op.R_cart[0][0]*q_cart[0] + op.R_cart[0][1]*q_cart[1] + op.R_cart[0][2]*q_cart[2],
+                    op.R_cart[1][0]*q_cart[0] + op.R_cart[1][1]*q_cart[1] + op.R_cart[1][2]*q_cart[2],
+                    op.R_cart[2][0]*q_cart[0] + op.R_cart[2][1]*q_cart[1] + op.R_cart[2][2]*q_cart[2]
+                ];
+                let dq_cart = [
+                    Rq_cart[0] - q_cart[0],
+                    Rq_cart[1] - q_cart[1],
+                    Rq_cart[2] - q_cart[2]
+                ];
+                
+                // Check if dq_cart is a reciprocal lattice vector
+                let G_frac = [
+                    vec_dot(dq_cart, lat[0]),
+                    vec_dot(dq_cart, lat[1]),
+                    vec_dot(dq_cart, lat[2])
+                ];
+                
+                let isInteger = (val) => Math.abs(val - Math.round(val)) < 1e-3;
+                if (!isInteger(G_frac[0]) || !isInteger(G_frac[1]) || !isInteger(G_frac[2])) {
+                    continue; // Skip operations not in the little group
+                }
+            }
+            
+            validOpsCount++;
+
             let angleDeg = Math.round(op.angle * 180 / Math.PI);
             let displayLabel = `#${i}: ${op.label}`;
             if (!op.isImproper && angleDeg > 0) {
                 displayLabel += ` [${angleDeg}°]`;
             }
             this.dropdownEl.append(`<option value="${i}">${displayLabel}</option>`);
+        }
+        
+        if (validOpsCount === 0) {
+            this.dropdownEl.append(`<option value="-1">No applicable operations for this mode</option>`);
         }
     }
 
@@ -112845,17 +112930,38 @@ class SymmetryVisualizer {
         if (!this.active) return;
         this.precomputeOperations();
         this.populateDropdown();
-        this.createGhostLattice();
-        if (this.currentOpIndex < 0 || this.currentOpIndex >= this.cartesianOps.length) {
-            let firstNonIdentity = this.cartesianOps.findIndex(op => op.label !== 'E (Identity)');
-            this.currentOpIndex = firstNonIdentity >= 0 ? firstNonIdentity : 0;
-            if (this.dropdownEl) this.dropdownEl.val(this.currentOpIndex);
+        
+        let validOps = [];
+        if (this.dropdownEl) {
+            // Need to handle standard DOM element or jQuery depending on what dropdownEl is
+            let options = this.dropdownEl[0].options;
+            for (let i = 0; i < options.length; i++) {
+                let val = parseInt(options[i].value, 10);
+                if (val >= 0) validOps.push(val);
+            }
         }
-        let op = this.cartesianOps[this.currentOpIndex];
-        if (op) {
-            this.applyInterpolatedOperation(op, this.sliderRotValue, this.sliderTransValue);
-            this.drawSymmetryElement(op);
+
+        if (validOps.length > 0 && !validOps.includes(this.currentOpIndex)) {
+            this.currentOpIndex = validOps[0];
+        } else if (validOps.length === 0) {
+            this.currentOpIndex = -1;
         }
+
+        if (this.dropdownEl && this.currentOpIndex >= 0) {
+            this.dropdownEl.val(this.currentOpIndex);
+        }
+
+        if (this.currentOpIndex >= 0) {
+            this.createGhostLattice();
+            let op = this.cartesianOps[this.currentOpIndex];
+            if (op) {
+                this.applyInterpolatedOperation(op, this.sliderRotValue, this.sliderTransValue);
+                this.drawSymmetryElement(op);
+            }
+        } else {
+            this.removeGhostLattice();
+        }
+
         this.refreshGhostBondsVisibility();
         this.crystal.needsRender = true;
         this.crystal.startAnimationLoop();
@@ -113115,44 +113221,25 @@ class SymmetryVisualizer {
      */
     createGhostLattice() {
         if (!this.crystal.atomobjects || !this.crystal.atompos) return;
+        
         this.removeGhostLattice();
 
-        let sphereGeom = new SphereGeometry(0.3, 16, 12);
-
-        // Cache materials by atom number to save memory
-        let materialCache = {};
-
-        let reps = this.crystal.phonon && this.crystal.phonon.repetitions ? this.crystal.phonon.repetitions : [1, 1, 1];
-        let offsets = [[0, 0, 0]];
-
-        // Limit the ghost shell to max 2x2x2 repetitions (8 unit cells) to preserve performance
-        let maxRepetitions = 8;
-        let totalRepetitions = reps[0] * reps[1] * reps[2];
-
-        if (totalRepetitions <= maxRepetitions && this.crystal.phonon && this.crystal.phonon.lat) {
-            let lat = this.crystal.phonon.lat;
-            // Multiply the primitive lattice vectors by the repetitions to get the supercell vectors
-            let v1 = new Vector3(lat[0][0], lat[0][1], lat[0][2]).multiplyScalar(reps[0]);
-            let v2 = new Vector3(lat[1][0], lat[1][1], lat[1][2]).multiplyScalar(reps[1]);
-            let v3 = new Vector3(lat[2][0], lat[2][1], lat[2][2]).multiplyScalar(reps[2]);
-            
-            // Add 26 neighboring supercells
-            for (let i = -1; i <= 1; i++) {
-                for (let j = -1; j <= 1; j++) {
-                    for (let k = -1; k <= 1; k++) {
-                        if (i === 0 && j === 0 && k === 0) continue;
-                        let offset = new Vector3()
-                            .addScaledVector(v1, i)
-                            .addScaledVector(v2, j)
-                            .addScaledVector(v3, k);
-                        offsets.push([offset.x, offset.y, offset.z]);
-                    }
-                }
-            }
+        if (this.ghostAtomsCheckboxEl && !this.ghostAtomsCheckboxEl.is(':checked')) {
+            return;
         }
 
+        if (this.currentOpIndex < 0) return;
+        let op = this.cartesianOps[this.currentOpIndex];
+        let R = op.R_cart;
+        let t = op.t_cart;
+        let center = this.crystal.geometricCenter;
+
+        let sphereGeom = new SphereGeometry(0.3, 16, 12);
+        let materialCache = {};
+
+        // 1. Ghost Atoms at final positions
         for (let i = 0; i < this.crystal.atompos.length; i++) {
-            let pos = this.crystal.atompos[i];
+            let eqPos = this.crystal.atompos[i];
             let atomNumber = this.crystal.atomobjects[i].atom_number;
             
             if (!materialCache[atomNumber]) {
@@ -113163,27 +113250,22 @@ class SymmetryVisualizer {
                     opacity: 0.3,
                     depthWrite: false
                 });
-                materialCache[atomNumber + '_shell'] = new MeshLambertMaterial({
-                    color: colorHex,
-                    transparent: true,
-                    opacity: 0.1, // lowered opacity for boundary shell
-                    depthWrite: false
-                });
             }
 
-            for (let offset of offsets) {
-                let isCenter = (offset[0] === 0 && offset[1] === 0 && offset[2] === 0);
-                let mat = isCenter ? materialCache[atomNumber] : materialCache[atomNumber + '_shell'];
-                
-                let mesh = new Mesh(sphereGeom, mat);
-                mesh.position.set(pos.x + offset[0], pos.y + offset[1], pos.z + offset[2]);
-                mesh.name = 'symmetry-ghost';
-                this.crystal.scene.add(mesh);
-                this.ghostMeshes.push(mesh);
-            }
+            let truePos = new Vector3().copy(eqPos).add(center);
+            let targetX = R[0][0]*truePos.x + R[0][1]*truePos.y + R[0][2]*truePos.z + t[0];
+            let targetY = R[1][0]*truePos.x + R[1][1]*truePos.y + R[1][2]*truePos.z + t[1];
+            let targetZ = R[2][0]*truePos.x + R[2][1]*truePos.y + R[2][2]*truePos.z + t[2];
+            let finalPos = new Vector3(targetX, targetY, targetZ).sub(center);
+
+            let mesh = new Mesh(sphereGeom, materialCache[atomNumber]);
+            mesh.position.copy(finalPos);
+            mesh.name = 'symmetry-ghost';
+            this.crystal.scene.add(mesh);
+            this.ghostMeshes.push(mesh);
         }
 
-        // Ghost bonds
+        // 2. Ghost Bonds at final positions
         if (this.crystal.bonds && this.crystal.bonds.length > 0) {
             let bondMat = new MeshLambertMaterial({
                 color: 0x666666,
@@ -113191,19 +113273,27 @@ class SymmetryVisualizer {
                 opacity: 0.15,
                 depthWrite: false
             });
-
             let bondGeom = new CylinderGeometry(0.06, 0.06, 1, 6);
 
             for (let i = 0; i < this.crystal.bonds.length; i++) {
                 let bond = this.crystal.bonds[i];
-                let a = bond.a;
-                let b = bond.b;
+                if (!bond.a || !bond.b) continue;
 
-                // Use stored atom positions for bond endpoints
-                if (!a || !b) continue;
+                // Transform endpoints
+                let trueA = new Vector3().copy(bond.a).add(center);
+                let targetAX = R[0][0]*trueA.x + R[0][1]*trueA.y + R[0][2]*trueA.z + t[0];
+                let targetAY = R[1][0]*trueA.x + R[1][1]*trueA.y + R[1][2]*trueA.z + t[1];
+                let targetAZ = R[2][0]*trueA.x + R[2][1]*trueA.y + R[2][2]*trueA.z + t[2];
+                let finalA = new Vector3(targetAX, targetAY, targetAZ).sub(center);
 
-                let midpoint = new Vector3().addVectors(a, b).multiplyScalar(0.5);
-                let dir = new Vector3().subVectors(b, a);
+                let trueB = new Vector3().copy(bond.b).add(center);
+                let targetBX = R[0][0]*trueB.x + R[0][1]*trueB.y + R[0][2]*trueB.z + t[0];
+                let targetBY = R[1][0]*trueB.x + R[1][1]*trueB.y + R[1][2]*trueB.z + t[1];
+                let targetBZ = R[2][0]*trueB.x + R[2][1]*trueB.y + R[2][2]*trueB.z + t[2];
+                let finalB = new Vector3(targetBX, targetBY, targetBZ).sub(center);
+
+                let midpoint = new Vector3().addVectors(finalA, finalB).multiplyScalar(0.5);
+                let dir = new Vector3().subVectors(finalB, finalA);
                 let len = dir.length();
                 dir.normalize();
 
@@ -113367,6 +113457,7 @@ symViz.bindDOM(
     $$1('#sym-slider-rot-label'),
     $$1('#sym-op-label'),
     $$1('#sym-animator-toggle'),
+    $$1('#sym-show-ghost-atoms'),
     $$1('#sym-show-bonds')
 );
 // Deactivate symmetry animator when material changes

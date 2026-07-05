@@ -92052,10 +92052,13 @@ function getReasonableRepetitions(natoms,lat) {
     in which directions the repetitions are made
     */
 
-    if (natoms <= 4)                              { return [3,3,3]; }
-    if (natoms > 4 && natoms <= 15)              { return [2,2,2]; }
-    if (natoms > 15 && natoms <= 50)             { return [2,2,1]; }
-    return [1,1,1];
+    if (natoms <= 10) { 
+        return [3, 3, 3]; 
+    } else if (natoms <= 20) { 
+        return [2, 2, 2]; 
+    } else { 
+        return [1, 1, 1]; 
+    }
 
 }
 
