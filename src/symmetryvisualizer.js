@@ -59,7 +59,7 @@ export class SymmetryVisualizer {
     // DOM BINDING
     // ─────────────────────────────────────────────
 
-    bindDOM(panelEl, dropdownEl, sliderRotEl, sliderTransEl, rotContainer, transContainer, rotLabel, labelEl, toggleBtn, ghostAtomsCheckboxEl, bondsCheckboxEl) {
+    bindDOM(panelEl, dropdownEl, sliderRotEl, sliderTransEl, rotContainer, transContainer, rotLabel, labelEl, toggleBtn, ghostAtomsCheckboxEl, bondsCheckboxEl, planesCheckboxEl) {
         this.panelEl = panelEl;
         this.dropdownEl = dropdownEl;
         this.sliderRotEl = sliderRotEl;
@@ -71,6 +71,7 @@ export class SymmetryVisualizer {
         this.toggleBtn = toggleBtn;
         this.ghostAtomsCheckboxEl = ghostAtomsCheckboxEl;
         this.bondsCheckboxEl = bondsCheckboxEl;
+        this.planesCheckboxEl = planesCheckboxEl;
 
         // Toggle button shows/hides the panel
         if (this.toggleBtn) {
@@ -127,6 +128,18 @@ export class SymmetryVisualizer {
                 this.refreshGhostBondsVisibility();
             });
         }
+
+        // Checkbox: toggle planes and axes
+        if (this.planesCheckboxEl) {
+            this.planesCheckboxEl.on('change', () => {
+                let isChecked = this.planesCheckboxEl.is(':checked');
+                if (this.axesAndPlanesGroup) {
+                    this.axesAndPlanesGroup.visible = isChecked;
+                    this.crystal.needsRender = true;
+                    this.crystal.startAnimationLoop();
+                }
+            });
+        }
     }
 
     // ─────────────────────────────────────────────
@@ -171,6 +184,9 @@ export class SymmetryVisualizer {
         if (firstNonIdentity < 0) firstNonIdentity = 0;
         if (this.dropdownEl) this.dropdownEl.val(firstNonIdentity);
         this.selectOperation(firstNonIdentity);
+
+        // Add axes and planes
+        this.createAxesAndPlanes();
     }
 
     deactivate() {
@@ -194,6 +210,9 @@ export class SymmetryVisualizer {
         // Remove ghost lattice
         this.removeGhostLattice();
 
+        // Remove axes and planes
+        this.removeAxesAndPlanes();
+
         // Reset atom positions to equilibrium
         this.resetAtomPositions();
 
@@ -207,6 +226,72 @@ export class SymmetryVisualizer {
         // Trigger a render
         this.crystal.needsRender = true;
         this.crystal.startAnimationLoop();
+    }
+
+    // ─────────────────────────────────────────────
+    // AXES AND PLANES (Feature 1)
+    // ─────────────────────────────────────────────
+
+    createAxesAndPlanes() {
+        this.removeAxesAndPlanes();
+
+        let maxDist = 5;
+        if (this.crystal.atompos && this.crystal.atompos.length > 0) {
+            for (let pos of this.crystal.atompos) {
+                maxDist = Math.max(maxDist, pos.length());
+            }
+        }
+        let size = maxDist * 2.5;
+
+        // The physical crystallographic origin is at -geometricCenter in viewer space
+        let origin = new THREE.Vector3().copy(this.crystal.geometricCenter).multiplyScalar(-1);
+
+        this.axesAndPlanesGroup = new THREE.Group();
+        this.axesAndPlanesGroup.position.copy(origin);
+
+        // Axes (Red=X, Green=Y, Blue=Z)
+        let axesHelper = new THREE.AxesHelper(size * 0.8);
+        this.axesAndPlanesGroup.add(axesHelper);
+
+        // Planes (XY, YZ, ZX)
+        let createPlane = (color, rotX, rotY, rotZ) => {
+            // Add grid helper on the plane
+            let grid = new THREE.GridHelper(size, 50, color, color);
+            grid.material.opacity = 0.12;
+            grid.material.transparent = true;
+            grid.rotation.set(rotX, rotY, rotZ);
+
+            // GridHelper in Three.js is created on the XZ plane by default.
+            // PlaneGeometry is created on the XY plane.
+            // So we must rotate the grid by 90 degrees on X to match the plane coordinates.
+            grid.rotateX(Math.PI / 2);
+
+            this.axesAndPlanesGroup.add(grid);
+        };
+
+        // XY plane (blueish) - normal is Z
+        createPlane(0x0000ff, 0, 0, 0);
+        // YZ plane (reddish) - normal is X
+        createPlane(0xff0000, 0, Math.PI/2, 0);
+        // ZX plane (greenish) - normal is Y
+        createPlane(0x00ff00, Math.PI/2, 0, 0);
+
+        if (this.planesCheckboxEl && !this.planesCheckboxEl.is(':checked')) {
+            this.axesAndPlanesGroup.visible = false;
+        }
+
+        this.crystal.scene.add(this.axesAndPlanesGroup);
+    }
+
+    removeAxesAndPlanes() {
+        if (this.axesAndPlanesGroup) {
+            this.crystal.scene.remove(this.axesAndPlanesGroup);
+            this.axesAndPlanesGroup.traverse((child) => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+            this.axesAndPlanesGroup = null;
+        }
     }
 
     // ─────────────────────────────────────────────
@@ -615,6 +700,10 @@ export class SymmetryVisualizer {
 
     refreshGhostLattice() {
         if (!this.active) return;
+
+        // Always ensure axes/planes are created/restored in case scene was cleared by vibcrystal.updatelocal
+        this.createAxesAndPlanes();
+
         this.precomputeOperations();
         this.populateDropdown();
         

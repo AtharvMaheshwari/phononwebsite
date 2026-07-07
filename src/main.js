@@ -127,7 +127,8 @@ symViz.bindDOM(
     $('#sym-op-label'),
     $('#sym-animator-toggle'),
     $('#sym-show-ghost-atoms'),
-    $('#sym-show-bonds')
+    $('#sym-show-bonds'),
+    $('#sym-show-planes')
 );
 // Deactivate symmetry animator when material changes
 p.onMaterialChanged = () => symViz.onMaterialChanged();
