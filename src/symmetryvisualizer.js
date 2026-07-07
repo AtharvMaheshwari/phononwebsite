@@ -142,6 +142,85 @@ export class SymmetryVisualizer {
         }
     }
 
+    bindReferenceDOM(refCrystal, showBtn, popupEl, closeBtn, syncBtn, headerEl) {
+        this.refCrystal = refCrystal;
+        this.refPopupEl = popupEl;
+
+        if (showBtn) {
+            showBtn.on('click', () => {
+                if (!this.refPopupEl) return;
+                
+                if (this.refPopupEl.is(':visible')) {
+                    this.refPopupEl.hide();
+                    showBtn.text('Show Reference Crystal');
+                } else {
+                    this.refPopupEl.show();
+                    showBtn.text('Hide Reference Crystal');
+                    // trigger resize for the ref crystal to ensure canvas sizes correctly
+                    if (this.refCrystal && this.refCrystal.onWindowResize) {
+                        setTimeout(() => this.refCrystal.onWindowResize(), 10);
+                    }
+                }
+            });
+        }
+
+        if (closeBtn) {
+            closeBtn.on('click', () => {
+                if (this.refPopupEl) {
+                    this.refPopupEl.hide();
+                    if (showBtn) showBtn.text('Show Reference Crystal');
+                }
+            });
+        }
+
+        if (syncBtn) {
+            syncBtn.on('click', () => {
+                if (this.crystal && this.refCrystal) {
+                    this.refCrystal.camera.position.copy(this.crystal.camera.position);
+                    this.refCrystal.camera.quaternion.copy(this.crystal.camera.quaternion);
+                    if (this.crystal.controls && this.refCrystal.controls) {
+                        this.refCrystal.controls.target.copy(this.crystal.controls.target);
+                    }
+                    this.refCrystal.needsRender = true;
+                    this.refCrystal.startAnimationLoop();
+                }
+            });
+        }
+
+        // Custom drag logic for the popup window
+        if (headerEl && popupEl) {
+            let isDragging = false;
+            let startX, startY, initialTop, initialLeft;
+
+            headerEl.on('mousedown', (e) => {
+                isDragging = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                let pos = popupEl.position();
+                initialTop = pos.top;
+                initialLeft = pos.left;
+                // prevent selection
+                e.preventDefault();
+            });
+
+            $(document).on('mousemove', (e) => {
+                if (isDragging) {
+                    let dx = e.clientX - startX;
+                    let dy = e.clientY - startY;
+                    popupEl.css({
+                        top: initialTop + dy + 'px',
+                        left: initialLeft + dx + 'px',
+                        right: 'auto' // clear 'right' to respect 'left'
+                    });
+                }
+            });
+
+            $(document).on('mouseup', () => {
+                isDragging = false;
+            });
+        }
+    }
+
     // ─────────────────────────────────────────────
     // ACTIVATION / DEACTIVATION
     // ─────────────────────────────────────────────
@@ -292,6 +371,57 @@ export class SymmetryVisualizer {
             });
             this.axesAndPlanesGroup = null;
         }
+    }
+
+    createReferenceAxesAndPlanes() {
+        if (!this.refCrystal) return;
+
+        // Remove old if any
+        if (this.refAxesAndPlanesGroup) {
+            this.refCrystal.scene.remove(this.refAxesAndPlanesGroup);
+            this.refAxesAndPlanesGroup.traverse((child) => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+        }
+
+        let maxDist = 5;
+        if (this.refCrystal.atompos && this.refCrystal.atompos.length > 0) {
+            for (let pos of this.refCrystal.atompos) {
+                maxDist = Math.max(maxDist, pos.length());
+            }
+        }
+        let size = maxDist * 2.5;
+
+        // Physical crystallographic origin
+        let origin = new THREE.Vector3().copy(this.refCrystal.geometricCenter).multiplyScalar(-1);
+
+        this.refAxesAndPlanesGroup = new THREE.Group();
+        this.refAxesAndPlanesGroup.position.copy(origin);
+
+        // Axes (Red=X, Green=Y, Blue=Z)
+        let axesHelper = new THREE.AxesHelper(size * 0.8);
+        this.refAxesAndPlanesGroup.add(axesHelper);
+
+        let createPlane = (color, rotX, rotY, rotZ) => {
+            let grid = new THREE.GridHelper(size, 50, color, color);
+            grid.material.opacity = 0.12;
+            grid.material.transparent = true;
+            grid.rotation.set(rotX, rotY, rotZ);
+            grid.rotateX(Math.PI / 2);
+            this.refAxesAndPlanesGroup.add(grid);
+        };
+
+        // XY plane (blueish) - normal is Z
+        createPlane(0x0000ff, 0, 0, 0);
+        // YZ plane (reddish) - normal is X
+        createPlane(0xff0000, 0, Math.PI/2, 0);
+        // ZX plane (greenish) - normal is Y
+        createPlane(0x00ff00, Math.PI/2, 0, 0);
+
+        this.refCrystal.scene.add(this.refAxesAndPlanesGroup);
+        this.refCrystal.needsRender = true;
+        this.refCrystal.startAnimationLoop();
     }
 
     // ─────────────────────────────────────────────

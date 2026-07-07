@@ -130,6 +130,29 @@ symViz.bindDOM(
     $('#sym-show-bonds'),
     $('#sym-show-planes')
 );
+
+// Setup Reference Crystal for Feature 2
+const refV = new VibCrystal($('#sym-reference-viewer'));
+refV.arrows = false;
+symViz.bindReferenceDOM(
+    refV,
+    $('#sym-show-reference-btn'),
+    $('#sym-reference-popup'),
+    $('#sym-reference-close-btn'),
+    $('#sym-reference-sync-btn'),
+    $('#sym-reference-header')
+);
+// Make sure refV updates when the main crystal updates
+const originalUpdate = v.update.bind(v);
+v.update = function(phononweb) {
+    originalUpdate(phononweb);
+    // Copy necessary properties and update
+    refV.shading = v.shading;
+    refV.lines = v.lines;
+    refV.update(phononweb);
+    refV.amplitude = 0; // static
+    symViz.createReferenceAxesAndPlanes();
+};
 // Deactivate symmetry animator when material changes
 p.onMaterialChanged = () => symViz.onMaterialChanged();
 
