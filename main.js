@@ -99389,7 +99389,7 @@ class VibCrystal extends StructureViewerBase {
                 arrowMesh.position.y = length;
                 object.add(axisMesh);
                 object.add(arrowMesh);
-                object.position.copy( geometricCenter );
+                object.position.copy( this.atompos[i] );
 
                 this.scene.add( object );
                 this.arrowobjects.push( object );
@@ -99802,6 +99802,7 @@ class VibCrystal extends StructureViewerBase {
                     let vlength = v.length()/effAmp;
                     let s = .5*this.arrowScale/effAmp;
 
+                    this.arrowobjects[i].visible = true;
                     this.arrowobjects[i].position.set(x+vx*s,y+vy*s,z+vz*s);
                     this.arrowobjects[i].scale.y = vlength*this.arrowScale;
                     this.arrowobjects[i].quaternion.setFromUnitVectors(vec_y,v.normalize());
@@ -99860,6 +99861,20 @@ class VibCrystal extends StructureViewerBase {
             }
 
         }
+
+        // When the symmetry animator is active the phonon animation loop is
+        // skipped. We hide the native arrows by scaling them to 0. The
+        // SymmetryVisualizer will render its own custom arrows for the initial,
+        // final, and moving states.
+        if (this.symmetryAnimationActive && this.arrows &&
+                this.arrowobjects && this.arrowobjects.length) {
+            for (let i = 0; i < this.arrowobjects.length; i++) {
+                this.arrowobjects[i].visible = false;
+            }
+        }
+
+
+
 
         this.renderer.render( this.scene, this.camera );
         this.drawHUD();
@@ -112374,7 +112389,7 @@ class SymmetryVisualizer {
     // DOM BINDING
     // ─────────────────────────────────────────────
 
-    bindDOM(panelEl, dropdownEl, sliderRotEl, sliderTransEl, rotContainer, transContainer, rotLabel, labelEl, toggleBtn, ghostAtomsCheckboxEl, bondsCheckboxEl) {
+    bindDOM(panelEl, dropdownEl, sliderRotEl, sliderTransEl, rotContainer, transContainer, rotLabel, labelEl, toggleBtn, ghostAtomsCheckboxEl, bondsCheckboxEl, planesCheckboxEl, autoplayCheckboxEl) {
         this.panelEl = panelEl;
         this.dropdownEl = dropdownEl;
         this.sliderRotEl = sliderRotEl;
@@ -112386,6 +112401,8 @@ class SymmetryVisualizer {
         this.toggleBtn = toggleBtn;
         this.ghostAtomsCheckboxEl = ghostAtomsCheckboxEl;
         this.bondsCheckboxEl = bondsCheckboxEl;
+        this.planesCheckboxEl = planesCheckboxEl;
+        this.autoplayCheckboxEl = autoplayCheckboxEl;
 
         // Toggle button shows/hides the panel
         if (this.toggleBtn) {
@@ -112442,6 +112459,108 @@ class SymmetryVisualizer {
                 this.refreshGhostBondsVisibility();
             });
         }
+
+        // Checkbox: toggle planes and axes
+        if (this.planesCheckboxEl) {
+            this.planesCheckboxEl.on('change', () => {
+                let isChecked = this.planesCheckboxEl.is(':checked');
+                if (this.axesAndPlanesGroup) {
+                    this.axesAndPlanesGroup.visible = isChecked;
+                    this.crystal.needsRender = true;
+                    this.crystal.startAnimationLoop();
+                }
+            });
+        }
+
+        // Checkbox: Autoplay
+        if (this.autoplayCheckboxEl) {
+            this.autoplayCheckboxEl.on('change', () => {
+                if (this.autoplayCheckboxEl.is(':checked')) {
+                    this.startAutoplay();
+                } else {
+                    this.stopAutoplay();
+                }
+            });
+        }
+    }
+
+    bindReferenceDOM(refCrystal, showBtn, popupEl, closeBtn, syncBtn, headerEl) {
+        this.refCrystal = refCrystal;
+        this.refPopupEl = popupEl;
+
+        if (showBtn) {
+            showBtn.on('click', () => {
+                if (!this.refPopupEl) return;
+                
+                if (this.refPopupEl.is(':visible')) {
+                    this.refPopupEl.hide();
+                    showBtn.text('Show Reference Crystal');
+                } else {
+                    this.refPopupEl.show();
+                    showBtn.text('Hide Reference Crystal');
+                    // trigger resize for the ref crystal to ensure canvas sizes correctly
+                    if (this.refCrystal && this.refCrystal.onWindowResize) {
+                        setTimeout(() => this.refCrystal.onWindowResize(), 10);
+                    }
+                }
+            });
+        }
+
+        if (closeBtn) {
+            closeBtn.on('click', () => {
+                if (this.refPopupEl) {
+                    this.refPopupEl.hide();
+                    if (showBtn) showBtn.text('Show Reference Crystal');
+                }
+            });
+        }
+
+        if (syncBtn) {
+            syncBtn.on('click', () => {
+                if (this.crystal && this.refCrystal) {
+                    this.refCrystal.camera.position.copy(this.crystal.camera.position);
+                    this.refCrystal.camera.quaternion.copy(this.crystal.camera.quaternion);
+                    if (this.crystal.controls && this.refCrystal.controls) {
+                        this.refCrystal.controls.target.copy(this.crystal.controls.target);
+                    }
+                    this.refCrystal.needsRender = true;
+                    this.refCrystal.startAnimationLoop();
+                }
+            });
+        }
+
+        // Custom drag logic for the popup window
+        if (headerEl && popupEl) {
+            let isDragging = false;
+            let startX, startY, initialTop, initialLeft;
+
+            headerEl.on('mousedown', (e) => {
+                isDragging = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                let pos = popupEl.position();
+                initialTop = pos.top;
+                initialLeft = pos.left;
+                // prevent selection
+                e.preventDefault();
+            });
+
+            $(document).on('mousemove', (e) => {
+                if (isDragging) {
+                    let dx = e.clientX - startX;
+                    let dy = e.clientY - startY;
+                    popupEl.css({
+                        top: initialTop + dy + 'px',
+                        left: initialLeft + dx + 'px',
+                        right: 'auto' // clear 'right' to respect 'left'
+                    });
+                }
+            });
+
+            $(document).on('mouseup', () => {
+                isDragging = false;
+            });
+        }
     }
 
     // ─────────────────────────────────────────────
@@ -112460,9 +112579,11 @@ class SymmetryVisualizer {
         this.active = true;
         this.crystal.symmetryAnimationActive = true;
 
-        // Freeze phonon vibrations
+        // Freeze phonon vibrations — snap the current phase so arrows show
+        // the eigenvector direction at the exact moment symmetry was opened.
         this.savedAmplitude = this.crystal.amplitude;
         this.savedPaused = this.crystal.paused;
+        this.crystal.symmetryPhaseSnap = this.crystal.time; // capture current phase
         this.crystal.amplitude = 0;
         this.crystal.paused = false; // Keep rendering but with 0 amplitude
 
@@ -112484,6 +112605,13 @@ class SymmetryVisualizer {
         if (firstNonIdentity < 0) firstNonIdentity = 0;
         if (this.dropdownEl) this.dropdownEl.val(firstNonIdentity);
         this.selectOperation(firstNonIdentity);
+
+        // Add axes and planes
+        this.createAxesAndPlanes();
+
+        if (this.autoplayCheckboxEl && this.autoplayCheckboxEl.is(':checked')) {
+            this.startAutoplay();
+        }
     }
 
     deactivate() {
@@ -112491,6 +112619,8 @@ class SymmetryVisualizer {
         this.currentOpIndex = -1;
         this.sliderRotValue = 0;
         this.sliderTransValue = 0;
+
+        this.stopAutoplay();
 
         // Restore phonon vibrations
         this.crystal.symmetryAnimationActive = false;
@@ -112507,6 +112637,9 @@ class SymmetryVisualizer {
         // Remove ghost lattice
         this.removeGhostLattice();
 
+        // Remove axes and planes
+        this.removeAxesAndPlanes();
+
         // Reset atom positions to equilibrium
         this.resetAtomPositions();
 
@@ -112520,6 +112653,195 @@ class SymmetryVisualizer {
         // Trigger a render
         this.crystal.needsRender = true;
         this.crystal.startAnimationLoop();
+    }
+
+    // ─────────────────────────────────────────────
+    // AXES AND PLANES (Feature 1)
+    // ─────────────────────────────────────────────
+
+    createAxesAndPlanes() {
+        this.removeAxesAndPlanes();
+
+        let maxDist = 5;
+        if (this.crystal.atompos && this.crystal.atompos.length > 0) {
+            for (let pos of this.crystal.atompos) {
+                maxDist = Math.max(maxDist, pos.length());
+            }
+        }
+        let size = maxDist * 2.5;
+
+        // The physical crystallographic origin is at -geometricCenter in viewer space
+        let origin = new Vector3().copy(this.crystal.geometricCenter).multiplyScalar(-1);
+
+        this.axesAndPlanesGroup = new Group();
+        this.axesAndPlanesGroup.position.copy(origin);
+
+        // Axes (Red=X, Green=Y, Blue=Z)
+        let axesHelper = new AxesHelper(size * 0.8);
+        this.axesAndPlanesGroup.add(axesHelper);
+
+        // Planes (XY, YZ, ZX)
+        let createPlane = (color, rotX, rotY, rotZ) => {
+            // Add grid helper on the plane
+            let grid = new GridHelper(size, 50, color, color);
+            grid.material.opacity = 0.12;
+            grid.material.transparent = true;
+            grid.rotation.set(rotX, rotY, rotZ);
+
+            // GridHelper in Three.js is created on the XZ plane by default.
+            // PlaneGeometry is created on the XY plane.
+            // So we must rotate the grid by 90 degrees on X to match the plane coordinates.
+            grid.rotateX(Math.PI / 2);
+
+            this.axesAndPlanesGroup.add(grid);
+        };
+
+        // XY plane (blueish) - normal is Z
+        createPlane(0x0000ff, 0, 0, 0);
+        // YZ plane (reddish) - normal is X
+        createPlane(0xff0000, 0, Math.PI/2, 0);
+        // ZX plane (greenish) - normal is Y
+        createPlane(0x00ff00, Math.PI/2, 0, 0);
+
+        if (this.planesCheckboxEl && !this.planesCheckboxEl.is(':checked')) {
+            this.axesAndPlanesGroup.visible = false;
+        }
+
+        this.crystal.scene.add(this.axesAndPlanesGroup);
+    }
+
+    removeAxesAndPlanes() {
+        if (this.axesAndPlanesGroup) {
+            this.crystal.scene.remove(this.axesAndPlanesGroup);
+            this.axesAndPlanesGroup.traverse((child) => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+            this.axesAndPlanesGroup = null;
+        }
+    }
+
+    createReferenceAxesAndPlanes() {
+        if (!this.refCrystal) return;
+
+        // Remove old if any
+        if (this.refAxesAndPlanesGroup) {
+            this.refCrystal.scene.remove(this.refAxesAndPlanesGroup);
+            this.refAxesAndPlanesGroup.traverse((child) => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+        }
+
+        let maxDist = 5;
+        if (this.refCrystal.atompos && this.refCrystal.atompos.length > 0) {
+            for (let pos of this.refCrystal.atompos) {
+                maxDist = Math.max(maxDist, pos.length());
+            }
+        }
+        let size = maxDist * 2.5;
+
+        // Physical crystallographic origin
+        let origin = new Vector3().copy(this.refCrystal.geometricCenter).multiplyScalar(-1);
+
+        this.refAxesAndPlanesGroup = new Group();
+        this.refAxesAndPlanesGroup.position.copy(origin);
+
+        // Axes (Red=X, Green=Y, Blue=Z)
+        let axesHelper = new AxesHelper(size * 0.8);
+        this.refAxesAndPlanesGroup.add(axesHelper);
+
+        let createPlane = (color, rotX, rotY, rotZ) => {
+            let grid = new GridHelper(size, 50, color, color);
+            grid.material.opacity = 0.12;
+            grid.material.transparent = true;
+            grid.rotation.set(rotX, rotY, rotZ);
+            grid.rotateX(Math.PI / 2);
+            this.refAxesAndPlanesGroup.add(grid);
+        };
+
+        // XY plane (blueish) - normal is Z
+        createPlane(0x0000ff, 0, 0, 0);
+        // YZ plane (reddish) - normal is X
+        createPlane(0xff0000, 0, Math.PI/2, 0);
+        // ZX plane (greenish) - normal is Y
+        createPlane(0x00ff00, Math.PI/2, 0, 0);
+
+        this.refCrystal.scene.add(this.refAxesAndPlanesGroup);
+        this.refCrystal.needsRender = true;
+        this.refCrystal.startAnimationLoop();
+    }
+
+    // ─────────────────────────────────────────────
+    // AUTOPLAY ENGINE
+    // ─────────────────────────────────────────────
+
+    startAutoplay() {
+        if (this.isAutoplaying) return;
+        this.isAutoplaying = true;
+        this.lastTime = performance.now();
+        this.autoplayPhase = 0;
+        this.autoplayLoop();
+    }
+
+    stopAutoplay() {
+        this.isAutoplaying = false;
+        if (this.autoplayFrameId) {
+            cancelAnimationFrame(this.autoplayFrameId);
+            this.autoplayFrameId = null;
+        }
+    }
+
+    autoplayLoop() {
+        if (!this.isAutoplaying || !this.active) return;
+
+        let now = performance.now();
+        let dt = (now - this.lastTime) / 1000.0;
+        this.lastTime = now;
+
+        // Speed: 0.5 per second (2s per animation phase)
+        let speed = 0.5;
+        this.autoplayPhase += speed * dt;
+
+        let hasTrans = this.sliderTransContainer && this.sliderTransContainer.is(':visible');
+        let maxPhase = hasTrans ? 2.0 : 1.0;
+
+        // Add a 1 second pause (0.5 phase at speed 0.5) at the end of the animation
+        if (this.autoplayPhase > maxPhase + 0.5) {
+            this.autoplayPhase = 0;
+        }
+
+        let rotVal = 0;
+        let transVal = 0;
+
+        if (hasTrans) {
+            if (this.autoplayPhase <= 1.0) {
+                rotVal = this.autoplayPhase;
+                transVal = 0;
+            } else if (this.autoplayPhase <= 2.0) {
+                rotVal = 1.0;
+                transVal = this.autoplayPhase - 1.0;
+            } else {
+                rotVal = 1.0;
+                transVal = 1.0;
+            }
+        } else {
+            if (this.autoplayPhase <= 1.0) {
+                rotVal = this.autoplayPhase;
+            } else {
+                rotVal = 1.0;
+            }
+        }
+
+        rotVal = Math.min(Math.max(rotVal, 0), 1);
+        transVal = Math.min(Math.max(transVal, 0), 1);
+
+        if (this.sliderRotEl) this.sliderRotEl.val(Math.round(rotVal * 100));
+        if (this.sliderTransEl) this.sliderTransEl.val(Math.round(transVal * 100));
+        
+        this.setSliderValues(rotVal, transVal);
+
+        this.autoplayFrameId = requestAnimationFrame(() => this.autoplayLoop());
     }
 
     // ─────────────────────────────────────────────
@@ -112872,8 +113194,13 @@ class SymmetryVisualizer {
     selectOperation(idx) {
         if (idx < 0 || idx >= this.cartesianOps.length) return;
         this.currentOpIndex = idx;
-
         let op = this.cartesianOps[idx];
+        if (!op) return;
+
+        // Reset autoplay phase if active
+        if (this.isAutoplaying) {
+            this.autoplayPhase = 0;
+        }
 
         // Reset sliders
         this.sliderRotValue = 0;
@@ -112916,8 +113243,8 @@ class SymmetryVisualizer {
         this.removeGhostLattice();
         this.createGhostLattice();
 
-        // Set atoms to equilibrium
-        this.resetAtomPositions();
+        // Set atoms and main arrows to equilibrium (t=0)
+        this.applyInterpolatedOperation(op, 0, 0);
 
         this.refreshGhostBondsVisibility();
         this.drawSymmetryElement(op);
@@ -112928,6 +113255,10 @@ class SymmetryVisualizer {
 
     refreshGhostLattice() {
         if (!this.active) return;
+
+        // Always ensure axes/planes are created/restored in case scene was cleared by vibcrystal.updatelocal
+        this.createAxesAndPlanes();
+
         this.precomputeOperations();
         this.populateDropdown();
         
@@ -113051,6 +113382,54 @@ class SymmetryVisualizer {
                 this.crystal.instanceDummy.scale.set(1, 1, 1);
                 this.crystal.instanceDummy.updateMatrix();
                 atomInstance.mesh.setMatrixAt(atomInstance.instanceId, this.crystal.instanceDummy.matrix);
+            }
+
+            // Update main moving arrow if exists
+            if (this.mainArrows && this.mainArrows[i] && this.crystal.arrows) {
+                let vibrations = this.crystal.vibrationComponents[i];
+                let snapTime = (typeof this.crystal.symmetryPhaseSnap === 'number') ? this.crystal.symmetryPhaseSnap : 0;
+                let snapAngle = snapTime * 2.0 * Math.PI;
+                let snapRe = Math.cos(snapAngle);
+                let snapIm = Math.sin(snapAngle);
+
+                let vx = snapRe * vibrations[0][0] - snapIm * vibrations[0][1];
+                let vy = snapRe * vibrations[1][0] - snapIm * vibrations[1][1];
+                let vz = snapRe * vibrations[2][0] - snapIm * vibrations[2][1];
+
+                let v_orig = new Vector3(vx, vy, vz);
+                let v_interp = new Vector3();
+
+                if (op.isImproper) {
+                    let R = op.R_cart;
+                    let targetVx = R[0][0]*vx + R[0][1]*vy + R[0][2]*vz;
+                    let targetVy = R[1][0]*vx + R[1][1]*vy + R[1][2]*vz;
+                    let targetVz = R[2][0]*vx + R[2][1]*vy + R[2][2]*vz;
+                    v_interp.set(
+                        vx + tRot * (targetVx - vx),
+                        vy + tRot * (targetVy - vy),
+                        vz + tRot * (targetVz - vz)
+                    );
+                } else {
+                    v_interp.copy(v_orig).applyQuaternion(quat_full);
+                }
+
+                let vlength = v_interp.length();
+                if (vlength > 1e-10) {
+                    let halfVisual = vlength * this.crystal.arrowScale * 0.5;
+                    let nx = v_interp.x / vlength;
+                    let ny = v_interp.y / vlength;
+                    let nz = v_interp.z / vlength;
+                    
+                    this.mainArrows[i].position.set(
+                        newPos.x + nx * halfVisual,
+                        newPos.y + ny * halfVisual,
+                        newPos.z + nz * halfVisual
+                    );
+                    this.mainArrows[i].scale.y = vlength * this.crystal.arrowScale;
+                    this.mainArrows[i].quaternion.setFromUnitVectors(new Vector3(0,1,0), v_interp.normalize());
+                } else {
+                    this.mainArrows[i].scale.y = 0;
+                }
             }
         }
 
@@ -113216,6 +113595,43 @@ class SymmetryVisualizer {
     // ─────────────────────────────────────────────
 
     /**
+     * Helper to create an arrow mesh (mirroring vibcrystal's style)
+     */
+    createArrowMesh(color, opacity = 1.0) {
+        let arrowGeometry = new CylinderGeometry(
+            0,
+            this.crystal.arrowHeadRadiusRatio * this.crystal.arrowRadius,
+            this.crystal.arrowLength * this.crystal.arrowHeadLengthRatio,
+            16, 1, true // openEnded to prevent overlapping caps in transparency
+        );
+
+        let axisGeometry = new CylinderGeometry(
+            this.crystal.arrowRadius,
+            this.crystal.arrowRadius,
+            this.crystal.arrowLength,
+            16, 1, true // openEnded to prevent overlapping caps in transparency
+        );
+
+        let AxisMaterial = new MeshLambertMaterial({
+            color: color,
+            transparent: opacity < 1.0,
+            opacity: opacity,
+            depthWrite: opacity < 1.0 ? false : true,
+            blending: NormalBlending
+        });
+
+        let object = new Group();
+        let axisMesh = new Mesh(axisGeometry, AxisMaterial);
+        let arrowMesh = new Mesh(arrowGeometry, AxisMaterial);
+        let length = (this.crystal.arrowLength + this.crystal.arrowLength * this.crystal.arrowHeadLengthRatio) / 2;
+
+        arrowMesh.position.y = length;
+        object.add(axisMesh);
+        object.add(arrowMesh);
+        return object;
+    }
+
+    /**
      * Create semi-transparent "ghost" copies of all atoms at their
      * equilibrium positions as a visual reference.
      */
@@ -113238,6 +113654,14 @@ class SymmetryVisualizer {
         let materialCache = {};
 
         // 1. Ghost Atoms at final positions
+        let snapTime = (typeof this.crystal.symmetryPhaseSnap === 'number') ? this.crystal.symmetryPhaseSnap : 0;
+        let snapAngle = snapTime * 2.0 * Math.PI;
+        let snapRe = Math.cos(snapAngle);
+        let snapIm = Math.sin(snapAngle);
+        let vec_y = new Vector3(0, 1, 0);
+
+        this.mainArrows = [];
+
         for (let i = 0; i < this.crystal.atompos.length; i++) {
             let eqPos = this.crystal.atompos[i];
             let atomNumber = this.crystal.atomobjects[i].atom_number;
@@ -113247,22 +113671,89 @@ class SymmetryVisualizer {
                 materialCache[atomNumber] = new MeshLambertMaterial({
                     color: colorHex,
                     transparent: true,
-                    opacity: 0.3,
+                    opacity: 0.15,
                     depthWrite: false
                 });
             }
 
+            // --- INITIAL GHOST ATOM ---
+            let initialMesh = new Mesh(sphereGeom, materialCache[atomNumber]);
+            initialMesh.position.copy(eqPos);
+            initialMesh.name = 'symmetry-ghost-initial';
+            this.crystal.scene.add(initialMesh);
+            this.ghostMeshes.push(initialMesh);
+
+            // --- FINAL GHOST ATOM ---
             let truePos = new Vector3().copy(eqPos).add(center);
             let targetX = R[0][0]*truePos.x + R[0][1]*truePos.y + R[0][2]*truePos.z + t[0];
             let targetY = R[1][0]*truePos.x + R[1][1]*truePos.y + R[1][2]*truePos.z + t[1];
             let targetZ = R[2][0]*truePos.x + R[2][1]*truePos.y + R[2][2]*truePos.z + t[2];
             let finalPos = new Vector3(targetX, targetY, targetZ).sub(center);
 
-            let mesh = new Mesh(sphereGeom, materialCache[atomNumber]);
-            mesh.position.copy(finalPos);
-            mesh.name = 'symmetry-ghost';
-            this.crystal.scene.add(mesh);
-            this.ghostMeshes.push(mesh);
+            let finalMesh = new Mesh(sphereGeom, materialCache[atomNumber]);
+            finalMesh.position.copy(finalPos);
+            finalMesh.name = 'symmetry-ghost-final';
+            this.crystal.scene.add(finalMesh);
+            this.ghostMeshes.push(finalMesh);
+
+            // Add arrows if enabled
+            if (this.crystal.arrows && this.crystal.vibrationComponents && this.crystal.vibrationComponents[i]) {
+                let vibrations = this.crystal.vibrationComponents[i];
+                let vx = snapRe * vibrations[0][0] - snapIm * vibrations[0][1];
+                let vy = snapRe * vibrations[1][0] - snapIm * vibrations[1][1];
+                let vz = snapRe * vibrations[2][0] - snapIm * vibrations[2][1];
+
+                let v = new Vector3(vx, vy, vz);
+                let vlength = v.length(); // normalized (effAmp=1)
+                
+                // MAIN moving arrow (same color as original native arrows)
+                let mainArrow = this.createArrowMesh(this.crystal.arrowcolor, 1.0);
+                this.crystal.scene.add(mainArrow);
+                this.mainArrows.push(mainArrow);
+                // (position and rotation for mainArrow are set in applyInterpolatedOperation)
+
+                let halfVisual = vlength * this.crystal.arrowScale * 0.5;
+
+                // INITIAL GHOST ARROW (black, 0.15 opacity)
+                let initialGhostArrow = this.createArrowMesh(0x000000, 0.15);
+                if (vlength > 1e-10) {
+                    let nx = vx / vlength;
+                    let ny = vy / vlength;
+                    let nz = vz / vlength;
+                    initialGhostArrow.position.set(
+                        eqPos.x + nx * halfVisual,
+                        eqPos.y + ny * halfVisual,
+                        eqPos.z + nz * halfVisual
+                    );
+                    initialGhostArrow.scale.y = vlength * this.crystal.arrowScale;
+                    initialGhostArrow.quaternion.setFromUnitVectors(vec_y, v.normalize());
+                } else {
+                    initialGhostArrow.scale.y = 0;
+                }
+                initialGhostArrow.name = 'symmetry-ghost-arrow-initial';
+                this.crystal.scene.add(initialGhostArrow);
+                this.ghostMeshes.push(initialGhostArrow);
+
+                // FINAL GHOST ARROW (black, 0.15 opacity)
+                let finalGhostArrow = this.createArrowMesh(0x000000, 0.15);
+                if (vlength > 1e-10) {
+                    let nx = vx / vlength;
+                    let ny = vy / vlength;
+                    let nz = vz / vlength;
+                    finalGhostArrow.position.set(
+                        finalPos.x + nx * halfVisual,
+                        finalPos.y + ny * halfVisual,
+                        finalPos.z + nz * halfVisual
+                    );
+                    finalGhostArrow.scale.y = vlength * this.crystal.arrowScale;
+                    finalGhostArrow.quaternion.setFromUnitVectors(vec_y, v.normalize());
+                } else {
+                    finalGhostArrow.scale.y = 0;
+                }
+                finalGhostArrow.name = 'symmetry-ghost-arrow-final';
+                this.crystal.scene.add(finalGhostArrow);
+                this.ghostMeshes.push(finalGhostArrow);
+            }
         }
 
         // 2. Ghost Bonds at final positions
@@ -113325,10 +113816,23 @@ class SymmetryVisualizer {
     removeGhostLattice() {
         for (let mesh of this.ghostMeshes) {
             this.crystal.scene.remove(mesh);
-            if (mesh.geometry) mesh.geometry.dispose();
-            if (mesh.material) mesh.material.dispose();
+            mesh.traverse((child) => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
         }
         this.ghostMeshes = [];
+
+        if (this.mainArrows) {
+            for (let mesh of this.mainArrows) {
+                this.crystal.scene.remove(mesh);
+                mesh.traverse((child) => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) child.material.dispose();
+                });
+            }
+            this.mainArrows = [];
+        }
     }
 
     // ─────────────────────────────────────────────
@@ -113458,8 +113962,33 @@ symViz.bindDOM(
     $$1('#sym-op-label'),
     $$1('#sym-animator-toggle'),
     $$1('#sym-show-ghost-atoms'),
-    $$1('#sym-show-bonds')
+    $$1('#sym-show-bonds'),
+    $$1('#sym-show-planes'),
+    $$1('#sym-autoplay')
 );
+
+// Setup Reference Crystal for Feature 2
+const refV = new VibCrystal($$1('#sym-reference-viewer'));
+refV.arrows = false;
+symViz.bindReferenceDOM(
+    refV,
+    $$1('#sym-show-reference-btn'),
+    $$1('#sym-reference-popup'),
+    $$1('#sym-reference-close-btn'),
+    $$1('#sym-reference-sync-btn'),
+    $$1('#sym-reference-header')
+);
+// Make sure refV updates when the main crystal updates
+const originalUpdate = v.update.bind(v);
+v.update = function(phononweb) {
+    originalUpdate(phononweb);
+    // Copy necessary properties and update
+    refV.shading = v.shading;
+    refV.lines = v.lines;
+    refV.update(phononweb);
+    refV.amplitude = 0; // static
+    symViz.createReferenceAxesAndPlanes();
+};
 // Deactivate symmetry animator when material changes
 p.onMaterialChanged = () => symViz.onMaterialChanged();
 
