@@ -145,9 +145,11 @@ export class SymmetryVisualizer {
         this.active = true;
         this.crystal.symmetryAnimationActive = true;
 
-        // Freeze phonon vibrations
+        // Freeze phonon vibrations — snap the current phase so arrows show
+        // the eigenvector direction at the exact moment symmetry was opened.
         this.savedAmplitude = this.crystal.amplitude;
         this.savedPaused = this.crystal.paused;
+        this.crystal.symmetryPhaseSnap = this.crystal.time; // capture current phase
         this.crystal.amplitude = 0;
         this.crystal.paused = false; // Keep rendering but with 0 amplitude
 
@@ -601,8 +603,8 @@ export class SymmetryVisualizer {
         this.removeGhostLattice();
         this.createGhostLattice();
 
-        // Set atoms to equilibrium
-        this.resetAtomPositions();
+        // Set atoms and main arrows to equilibrium (t=0)
+        this.applyInterpolatedOperation(op, 0, 0);
 
         this.refreshGhostBondsVisibility();
         this.drawSymmetryElement(op);
@@ -736,6 +738,54 @@ export class SymmetryVisualizer {
                 this.crystal.instanceDummy.scale.set(1, 1, 1);
                 this.crystal.instanceDummy.updateMatrix();
                 atomInstance.mesh.setMatrixAt(atomInstance.instanceId, this.crystal.instanceDummy.matrix);
+            }
+
+            // Update main moving arrow if exists
+            if (this.mainArrows && this.mainArrows[i] && this.crystal.arrows) {
+                let vibrations = this.crystal.vibrationComponents[i];
+                let snapTime = (typeof this.crystal.symmetryPhaseSnap === 'number') ? this.crystal.symmetryPhaseSnap : 0;
+                let snapAngle = snapTime * 2.0 * Math.PI;
+                let snapRe = Math.cos(snapAngle);
+                let snapIm = Math.sin(snapAngle);
+
+                let vx = snapRe * vibrations[0][0] - snapIm * vibrations[0][1];
+                let vy = snapRe * vibrations[1][0] - snapIm * vibrations[1][1];
+                let vz = snapRe * vibrations[2][0] - snapIm * vibrations[2][1];
+
+                let v_orig = new THREE.Vector3(vx, vy, vz);
+                let v_interp = new THREE.Vector3();
+
+                if (op.isImproper) {
+                    let R = op.R_cart;
+                    let targetVx = R[0][0]*vx + R[0][1]*vy + R[0][2]*vz;
+                    let targetVy = R[1][0]*vx + R[1][1]*vy + R[1][2]*vz;
+                    let targetVz = R[2][0]*vx + R[2][1]*vy + R[2][2]*vz;
+                    v_interp.set(
+                        vx + tRot * (targetVx - vx),
+                        vy + tRot * (targetVy - vy),
+                        vz + tRot * (targetVz - vz)
+                    );
+                } else {
+                    v_interp.copy(v_orig).applyQuaternion(quat_full);
+                }
+
+                let vlength = v_interp.length();
+                if (vlength > 1e-10) {
+                    let halfVisual = vlength * this.crystal.arrowScale * 0.5;
+                    let nx = v_interp.x / vlength;
+                    let ny = v_interp.y / vlength;
+                    let nz = v_interp.z / vlength;
+                    
+                    this.mainArrows[i].position.set(
+                        newPos.x + nx * halfVisual,
+                        newPos.y + ny * halfVisual,
+                        newPos.z + nz * halfVisual
+                    );
+                    this.mainArrows[i].scale.y = vlength * this.crystal.arrowScale;
+                    this.mainArrows[i].quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), v_interp.normalize());
+                } else {
+                    this.mainArrows[i].scale.y = 0;
+                }
             }
         }
 
@@ -901,6 +951,43 @@ export class SymmetryVisualizer {
     // ─────────────────────────────────────────────
 
     /**
+     * Helper to create an arrow mesh (mirroring vibcrystal's style)
+     */
+    createArrowMesh(color, opacity = 1.0) {
+        let arrowGeometry = new THREE.CylinderGeometry(
+            0,
+            this.crystal.arrowHeadRadiusRatio * this.crystal.arrowRadius,
+            this.crystal.arrowLength * this.crystal.arrowHeadLengthRatio,
+            16, 1, true // openEnded to prevent overlapping caps in transparency
+        );
+
+        let axisGeometry = new THREE.CylinderGeometry(
+            this.crystal.arrowRadius,
+            this.crystal.arrowRadius,
+            this.crystal.arrowLength,
+            16, 1, true // openEnded to prevent overlapping caps in transparency
+        );
+
+        let AxisMaterial = new THREE.MeshLambertMaterial({
+            color: color,
+            transparent: opacity < 1.0,
+            opacity: opacity,
+            depthWrite: opacity < 1.0 ? false : true,
+            blending: THREE.NormalBlending
+        });
+
+        let object = new THREE.Group();
+        let axisMesh = new THREE.Mesh(axisGeometry, AxisMaterial);
+        let arrowMesh = new THREE.Mesh(arrowGeometry, AxisMaterial);
+        let length = (this.crystal.arrowLength + this.crystal.arrowLength * this.crystal.arrowHeadLengthRatio) / 2;
+
+        arrowMesh.position.y = length;
+        object.add(axisMesh);
+        object.add(arrowMesh);
+        return object;
+    }
+
+    /**
      * Create semi-transparent "ghost" copies of all atoms at their
      * equilibrium positions as a visual reference.
      */
@@ -923,6 +1010,14 @@ export class SymmetryVisualizer {
         let materialCache = {};
 
         // 1. Ghost Atoms at final positions
+        let snapTime = (typeof this.crystal.symmetryPhaseSnap === 'number') ? this.crystal.symmetryPhaseSnap : 0;
+        let snapAngle = snapTime * 2.0 * Math.PI;
+        let snapRe = Math.cos(snapAngle);
+        let snapIm = Math.sin(snapAngle);
+        let vec_y = new THREE.Vector3(0, 1, 0);
+
+        this.mainArrows = [];
+
         for (let i = 0; i < this.crystal.atompos.length; i++) {
             let eqPos = this.crystal.atompos[i];
             let atomNumber = this.crystal.atomobjects[i].atom_number;
@@ -932,22 +1027,89 @@ export class SymmetryVisualizer {
                 materialCache[atomNumber] = new THREE.MeshLambertMaterial({
                     color: colorHex,
                     transparent: true,
-                    opacity: 0.3,
+                    opacity: 0.15,
                     depthWrite: false
                 });
             }
 
+            // --- INITIAL GHOST ATOM ---
+            let initialMesh = new THREE.Mesh(sphereGeom, materialCache[atomNumber]);
+            initialMesh.position.copy(eqPos);
+            initialMesh.name = 'symmetry-ghost-initial';
+            this.crystal.scene.add(initialMesh);
+            this.ghostMeshes.push(initialMesh);
+
+            // --- FINAL GHOST ATOM ---
             let truePos = new THREE.Vector3().copy(eqPos).add(center);
             let targetX = R[0][0]*truePos.x + R[0][1]*truePos.y + R[0][2]*truePos.z + t[0];
             let targetY = R[1][0]*truePos.x + R[1][1]*truePos.y + R[1][2]*truePos.z + t[1];
             let targetZ = R[2][0]*truePos.x + R[2][1]*truePos.y + R[2][2]*truePos.z + t[2];
             let finalPos = new THREE.Vector3(targetX, targetY, targetZ).sub(center);
 
-            let mesh = new THREE.Mesh(sphereGeom, materialCache[atomNumber]);
-            mesh.position.copy(finalPos);
-            mesh.name = 'symmetry-ghost';
-            this.crystal.scene.add(mesh);
-            this.ghostMeshes.push(mesh);
+            let finalMesh = new THREE.Mesh(sphereGeom, materialCache[atomNumber]);
+            finalMesh.position.copy(finalPos);
+            finalMesh.name = 'symmetry-ghost-final';
+            this.crystal.scene.add(finalMesh);
+            this.ghostMeshes.push(finalMesh);
+
+            // Add arrows if enabled
+            if (this.crystal.arrows && this.crystal.vibrationComponents && this.crystal.vibrationComponents[i]) {
+                let vibrations = this.crystal.vibrationComponents[i];
+                let vx = snapRe * vibrations[0][0] - snapIm * vibrations[0][1];
+                let vy = snapRe * vibrations[1][0] - snapIm * vibrations[1][1];
+                let vz = snapRe * vibrations[2][0] - snapIm * vibrations[2][1];
+
+                let v = new THREE.Vector3(vx, vy, vz);
+                let vlength = v.length(); // normalized (effAmp=1)
+                
+                // MAIN moving arrow (same color as original native arrows)
+                let mainArrow = this.createArrowMesh(this.crystal.arrowcolor, 1.0);
+                this.crystal.scene.add(mainArrow);
+                this.mainArrows.push(mainArrow);
+                // (position and rotation for mainArrow are set in applyInterpolatedOperation)
+
+                let halfVisual = vlength * this.crystal.arrowScale * 0.5;
+
+                // INITIAL GHOST ARROW (black, 0.15 opacity)
+                let initialGhostArrow = this.createArrowMesh(0x000000, 0.15);
+                if (vlength > 1e-10) {
+                    let nx = vx / vlength;
+                    let ny = vy / vlength;
+                    let nz = vz / vlength;
+                    initialGhostArrow.position.set(
+                        eqPos.x + nx * halfVisual,
+                        eqPos.y + ny * halfVisual,
+                        eqPos.z + nz * halfVisual
+                    );
+                    initialGhostArrow.scale.y = vlength * this.crystal.arrowScale;
+                    initialGhostArrow.quaternion.setFromUnitVectors(vec_y, v.normalize());
+                } else {
+                    initialGhostArrow.scale.y = 0;
+                }
+                initialGhostArrow.name = 'symmetry-ghost-arrow-initial';
+                this.crystal.scene.add(initialGhostArrow);
+                this.ghostMeshes.push(initialGhostArrow);
+
+                // FINAL GHOST ARROW (black, 0.15 opacity)
+                let finalGhostArrow = this.createArrowMesh(0x000000, 0.15);
+                if (vlength > 1e-10) {
+                    let nx = vx / vlength;
+                    let ny = vy / vlength;
+                    let nz = vz / vlength;
+                    finalGhostArrow.position.set(
+                        finalPos.x + nx * halfVisual,
+                        finalPos.y + ny * halfVisual,
+                        finalPos.z + nz * halfVisual
+                    );
+                    finalGhostArrow.scale.y = vlength * this.crystal.arrowScale;
+                    finalGhostArrow.quaternion.setFromUnitVectors(vec_y, v.normalize());
+                } else {
+                    finalGhostArrow.scale.y = 0;
+                }
+                finalGhostArrow.name = 'symmetry-ghost-arrow-final';
+                this.crystal.scene.add(finalGhostArrow);
+                this.ghostMeshes.push(finalGhostArrow);
+            }
         }
 
         // 2. Ghost Bonds at final positions
@@ -1010,10 +1172,23 @@ export class SymmetryVisualizer {
     removeGhostLattice() {
         for (let mesh of this.ghostMeshes) {
             this.crystal.scene.remove(mesh);
-            if (mesh.geometry) mesh.geometry.dispose();
-            if (mesh.material) mesh.material.dispose();
+            mesh.traverse((child) => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
         }
         this.ghostMeshes = [];
+
+        if (this.mainArrows) {
+            for (let mesh of this.mainArrows) {
+                this.crystal.scene.remove(mesh);
+                mesh.traverse((child) => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) child.material.dispose();
+                });
+            }
+            this.mainArrows = [];
+        }
     }
 
     // ─────────────────────────────────────────────

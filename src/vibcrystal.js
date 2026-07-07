@@ -1751,6 +1751,7 @@ export class VibCrystal extends StructureViewerBase {
                     let vlength = v.length()/effAmp;
                     let s = .5*this.arrowScale/effAmp;
 
+                    this.arrowobjects[i].visible = true;
                     this.arrowobjects[i].position.set(x+vx*s,y+vy*s,z+vz*s);
                     this.arrowobjects[i].scale.y = vlength*this.arrowScale;
                     this.arrowobjects[i].quaternion.setFromUnitVectors(vec_y,v.normalize());
@@ -1811,35 +1812,17 @@ export class VibCrystal extends StructureViewerBase {
         }
 
         // When the symmetry animator is active the phonon animation loop is
-        // skipped, so arrows would stay at their initial positions with a
-        // default orientation. Update them here using the real part of the
-        // eigenvector at phase=0 so the displacement direction is still visible.
+        // skipped. We hide the native arrows by scaling them to 0. The
+        // SymmetryVisualizer will render its own custom arrows for the initial,
+        // final, and moving states.
         if (this.symmetryAnimationActive && this.arrows &&
-                this.arrowobjects && this.arrowobjects.length &&
-                this.vibrationComponents && this.vibrationComponents.length) {
-
-            for (let i = 0; i < this.atomobjects.length; i++) {
-                let atompos    = this.atompos[i];
-                let vibrations = this.vibrationComponents[i];
-
-                // Real part of eigenvector at phase=0
-                let vx = vibrations[0][0];
-                let vy = vibrations[1][0];
-                let vz = vibrations[2][0];
-
-                v.set(vx, vy, vz);
-                let vlength = v.length();
-
-                this.arrowobjects[i].position.copy(atompos);
-
-                if (vlength > 1e-10) {
-                    this.arrowobjects[i].scale.y = vlength * this.arrowScale;
-                    this.arrowobjects[i].quaternion.setFromUnitVectors(vec_y, v.normalize());
-                } else {
-                    this.arrowobjects[i].scale.y = 0;
-                }
+                this.arrowobjects && this.arrowobjects.length) {
+            for (let i = 0; i < this.arrowobjects.length; i++) {
+                this.arrowobjects[i].visible = false;
             }
         }
+
+
 
 
         this.renderer.render( this.scene, this.camera );
