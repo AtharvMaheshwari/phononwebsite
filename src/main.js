@@ -128,7 +128,8 @@ symViz.bindDOM(
     $('#sym-animator-toggle'),
     $('#sym-show-ghost-atoms'),
     $('#sym-show-bonds'),
-    $('#sym-show-planes')
+    $('#sym-show-planes'),
+    $('#sym-autoplay')
 );
 
 // Setup Reference Crystal for Feature 2

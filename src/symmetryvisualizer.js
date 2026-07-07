@@ -59,7 +59,7 @@ export class SymmetryVisualizer {
     // DOM BINDING
     // ─────────────────────────────────────────────
 
-    bindDOM(panelEl, dropdownEl, sliderRotEl, sliderTransEl, rotContainer, transContainer, rotLabel, labelEl, toggleBtn, ghostAtomsCheckboxEl, bondsCheckboxEl, planesCheckboxEl) {
+    bindDOM(panelEl, dropdownEl, sliderRotEl, sliderTransEl, rotContainer, transContainer, rotLabel, labelEl, toggleBtn, ghostAtomsCheckboxEl, bondsCheckboxEl, planesCheckboxEl, autoplayCheckboxEl) {
         this.panelEl = panelEl;
         this.dropdownEl = dropdownEl;
         this.sliderRotEl = sliderRotEl;
@@ -72,6 +72,7 @@ export class SymmetryVisualizer {
         this.ghostAtomsCheckboxEl = ghostAtomsCheckboxEl;
         this.bondsCheckboxEl = bondsCheckboxEl;
         this.planesCheckboxEl = planesCheckboxEl;
+        this.autoplayCheckboxEl = autoplayCheckboxEl;
 
         // Toggle button shows/hides the panel
         if (this.toggleBtn) {
@@ -137,6 +138,17 @@ export class SymmetryVisualizer {
                     this.axesAndPlanesGroup.visible = isChecked;
                     this.crystal.needsRender = true;
                     this.crystal.startAnimationLoop();
+                }
+            });
+        }
+
+        // Checkbox: Autoplay
+        if (this.autoplayCheckboxEl) {
+            this.autoplayCheckboxEl.on('change', () => {
+                if (this.autoplayCheckboxEl.is(':checked')) {
+                    this.startAutoplay();
+                } else {
+                    this.stopAutoplay();
                 }
             });
         }
@@ -266,6 +278,10 @@ export class SymmetryVisualizer {
 
         // Add axes and planes
         this.createAxesAndPlanes();
+
+        if (this.autoplayCheckboxEl && this.autoplayCheckboxEl.is(':checked')) {
+            this.startAutoplay();
+        }
     }
 
     deactivate() {
@@ -273,6 +289,8 @@ export class SymmetryVisualizer {
         this.currentOpIndex = -1;
         this.sliderRotValue = 0;
         this.sliderTransValue = 0;
+
+        this.stopAutoplay();
 
         // Restore phonon vibrations
         this.crystal.symmetryAnimationActive = false;
@@ -422,6 +440,78 @@ export class SymmetryVisualizer {
         this.refCrystal.scene.add(this.refAxesAndPlanesGroup);
         this.refCrystal.needsRender = true;
         this.refCrystal.startAnimationLoop();
+    }
+
+    // ─────────────────────────────────────────────
+    // AUTOPLAY ENGINE
+    // ─────────────────────────────────────────────
+
+    startAutoplay() {
+        if (this.isAutoplaying) return;
+        this.isAutoplaying = true;
+        this.lastTime = performance.now();
+        this.autoplayPhase = 0;
+        this.autoplayLoop();
+    }
+
+    stopAutoplay() {
+        this.isAutoplaying = false;
+        if (this.autoplayFrameId) {
+            cancelAnimationFrame(this.autoplayFrameId);
+            this.autoplayFrameId = null;
+        }
+    }
+
+    autoplayLoop() {
+        if (!this.isAutoplaying || !this.active) return;
+
+        let now = performance.now();
+        let dt = (now - this.lastTime) / 1000.0;
+        this.lastTime = now;
+
+        // Speed: 0.5 per second (2s per animation phase)
+        let speed = 0.5;
+        this.autoplayPhase += speed * dt;
+
+        let hasTrans = this.sliderTransContainer && this.sliderTransContainer.is(':visible');
+        let maxPhase = hasTrans ? 2.0 : 1.0;
+
+        // Add a 1 second pause (0.5 phase at speed 0.5) at the end of the animation
+        if (this.autoplayPhase > maxPhase + 0.5) {
+            this.autoplayPhase = 0;
+        }
+
+        let rotVal = 0;
+        let transVal = 0;
+
+        if (hasTrans) {
+            if (this.autoplayPhase <= 1.0) {
+                rotVal = this.autoplayPhase;
+                transVal = 0;
+            } else if (this.autoplayPhase <= 2.0) {
+                rotVal = 1.0;
+                transVal = this.autoplayPhase - 1.0;
+            } else {
+                rotVal = 1.0;
+                transVal = 1.0;
+            }
+        } else {
+            if (this.autoplayPhase <= 1.0) {
+                rotVal = this.autoplayPhase;
+            } else {
+                rotVal = 1.0;
+            }
+        }
+
+        rotVal = Math.min(Math.max(rotVal, 0), 1);
+        transVal = Math.min(Math.max(transVal, 0), 1);
+
+        if (this.sliderRotEl) this.sliderRotEl.val(Math.round(rotVal * 100));
+        if (this.sliderTransEl) this.sliderTransEl.val(Math.round(transVal * 100));
+        
+        this.setSliderValues(rotVal, transVal);
+
+        this.autoplayFrameId = requestAnimationFrame(() => this.autoplayLoop());
     }
 
     // ─────────────────────────────────────────────
@@ -774,8 +864,13 @@ export class SymmetryVisualizer {
     selectOperation(idx) {
         if (idx < 0 || idx >= this.cartesianOps.length) return;
         this.currentOpIndex = idx;
-
         let op = this.cartesianOps[idx];
+        if (!op) return;
+
+        // Reset autoplay phase if active
+        if (this.isAutoplaying) {
+            this.autoplayPhase = 0;
+        }
 
         // Reset sliders
         this.sliderRotValue = 0;
