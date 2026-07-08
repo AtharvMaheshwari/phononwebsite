@@ -1112,8 +1112,29 @@ export class SymmetryVisualizer {
                             eqPos.z + nzO * origHalfVisual
                         );
                     }
-                    if (this.finalGhostArrows && this.finalGhostArrows[i]) {
-                        this.finalGhostArrows[i].scale.y = origLength * this.crystal.arrowScale;
+                } else {
+                    if (this.initialGhostArrows && this.initialGhostArrows[i]) this.initialGhostArrows[i].scale.y = 0;
+                }
+
+                if (this.finalGhostArrows && this.finalGhostArrows[i]) {
+                    let j = (this.currentMapping && this.currentMapping[i] !== undefined) ? this.currentMapping[i] : i;
+                    let vibrations_j = this.crystal.vibrationComponents[j];
+                    let vx_j = 0, vy_j = 0, vz_j = 0;
+                    if (vibrations_j) {
+                        vx_j = snapRe * vibrations_j[0][0] - snapIm * vibrations_j[0][1];
+                        vy_j = snapRe * vibrations_j[1][0] - snapIm * vibrations_j[1][1];
+                        vz_j = snapRe * vibrations_j[2][0] - snapIm * vibrations_j[2][1];
+                    }
+                    let v_j = new THREE.Vector3(vx_j, vy_j, vz_j);
+                    let vlength_j = v_j.length();
+                    
+                    if (vlength_j > 1e-10) {
+                        let nx_j = vx_j / vlength_j;
+                        let ny_j = vy_j / vlength_j;
+                        let nz_j = vz_j / vlength_j;
+                        let halfVisual_j = vlength_j * this.crystal.arrowScale * 0.5;
+
+                        this.finalGhostArrows[i].scale.y = vlength_j * this.crystal.arrowScale;
                         // finalPos was already calculated, but we must re-calculate it to set position correctly
                         let truePos = new THREE.Vector3().copy(eqPos).add(center);
                         let R = op.R_cart;
@@ -1124,14 +1145,13 @@ export class SymmetryVisualizer {
                         let finalPos = new THREE.Vector3(targetX, targetY, targetZ).sub(center);
                         
                         this.finalGhostArrows[i].position.set(
-                            finalPos.x + nxO * origHalfVisual,
-                            finalPos.y + nyO * origHalfVisual,
-                            finalPos.z + nzO * origHalfVisual
+                            finalPos.x + nx_j * halfVisual_j,
+                            finalPos.y + ny_j * halfVisual_j,
+                            finalPos.z + nz_j * halfVisual_j
                         );
+                    } else {
+                        this.finalGhostArrows[i].scale.y = 0;
                     }
-                } else {
-                    if (this.initialGhostArrows && this.initialGhostArrows[i]) this.initialGhostArrows[i].scale.y = 0;
-                    if (this.finalGhostArrows && this.finalGhostArrows[i]) this.finalGhostArrows[i].scale.y = 0;
                 }
             }
         }
@@ -1335,6 +1355,57 @@ export class SymmetryVisualizer {
     }
 
     /**
+     * Compute the atom permutation map for a given symmetry operation.
+     * Returns an array `mapping` where `mapping[i] = j`, meaning atom `i`
+     * maps to atom `j` under the operation `R * r_i + t`.
+     */
+    getAtomMapping(op) {
+        let phonon = this.crystal.phonon;
+        if (!phonon || !phonon.atom_pos_red) return null;
+        
+        let mapping = [];
+        let R = op.R_frac;
+        let t = op.t_frac;
+        let pos = phonon.atom_pos_red;
+        let types = phonon.atomic_numbers || phonon.atom_numbers;
+        
+        for (let i = 0; i < pos.length; i++) {
+            let r_i = pos[i];
+            
+            // R * r_i + t
+            let rx = R[0][0]*r_i[0] + R[0][1]*r_i[1] + R[0][2]*r_i[2] + t[0];
+            let ry = R[1][0]*r_i[0] + R[1][1]*r_i[1] + R[1][2]*r_i[2] + t[1];
+            let rz = R[2][0]*r_i[0] + R[2][1]*r_i[1] + R[2][2]*r_i[2] + t[2];
+            
+            let match_j = i;
+            let minDist = 1e9;
+            
+            for (let j = 0; j < pos.length; j++) {
+                if (types && types[i] !== types[j]) continue;
+                
+                let r_j = pos[j];
+                let dx = rx - r_j[0];
+                let dy = ry - r_j[1];
+                let dz = rz - r_j[2];
+                
+                // Wrap to primitive cell [-0.5, 0.5)
+                dx = dx - Math.round(dx);
+                dy = dy - Math.round(dy);
+                dz = dz - Math.round(dz);
+                
+                let dist = dx*dx + dy*dy + dz*dz;
+                if (dist < minDist) {
+                    minDist = dist;
+                    match_j = j;
+                }
+            }
+            
+            mapping[i] = match_j;
+        }
+        return mapping;
+    }
+
+    /**
      * Create semi-transparent "ghost" copies of all atoms at their
      * equilibrium positions as a visual reference.
      */
@@ -1366,6 +1437,8 @@ export class SymmetryVisualizer {
         this.mainArrows = [];
         this.initialGhostArrows = [];
         this.finalGhostArrows = [];
+
+        this.currentMapping = this.getAtomMapping(op);
 
         for (let i = 0; i < this.crystal.atompos.length; i++) {
             let eqPos = this.crystal.atompos[i];
@@ -1443,17 +1516,31 @@ export class SymmetryVisualizer {
 
                 // FINAL GHOST ARROW (black, 0.15 opacity)
                 let finalGhostArrow = this.createArrowMesh(0x000000, 0.15);
-                if (vlength > 1e-10) {
-                    let nx = vx / vlength;
-                    let ny = vy / vlength;
-                    let nz = vz / vlength;
+                
+                // Get atom j that atom i maps to
+                let j = this.currentMapping ? this.currentMapping[i] : i;
+                let vibrations_j = this.crystal.vibrationComponents[j];
+                let vx_j = vx, vy_j = vy, vz_j = vz;
+                if (vibrations_j) {
+                    vx_j = snapRe * vibrations_j[0][0] - snapIm * vibrations_j[0][1];
+                    vy_j = snapRe * vibrations_j[1][0] - snapIm * vibrations_j[1][1];
+                    vz_j = snapRe * vibrations_j[2][0] - snapIm * vibrations_j[2][1];
+                }
+                let v_j = new THREE.Vector3(vx_j, vy_j, vz_j);
+                let vlength_j = v_j.length();
+                let halfVisual_j = vlength_j * this.crystal.arrowScale * 0.5;
+
+                if (vlength_j > 1e-10) {
+                    let nx_j = vx_j / vlength_j;
+                    let ny_j = vy_j / vlength_j;
+                    let nz_j = vz_j / vlength_j;
                     finalGhostArrow.position.set(
-                        finalPos.x + nx * halfVisual,
-                        finalPos.y + ny * halfVisual,
-                        finalPos.z + nz * halfVisual
+                        finalPos.x + nx_j * halfVisual_j,
+                        finalPos.y + ny_j * halfVisual_j,
+                        finalPos.z + nz_j * halfVisual_j
                     );
-                    finalGhostArrow.scale.y = vlength * this.crystal.arrowScale;
-                    finalGhostArrow.quaternion.setFromUnitVectors(vec_y, v.normalize());
+                    finalGhostArrow.scale.y = vlength_j * this.crystal.arrowScale;
+                    finalGhostArrow.quaternion.setFromUnitVectors(vec_y, v_j.normalize());
                 } else {
                     finalGhostArrow.scale.y = 0;
                 }
