@@ -113450,8 +113450,8 @@ class SymmetryVisualizer {
                 }
 
                 if (this.finalGhostArrows && this.finalGhostArrows[i]) {
-                    let j = (this.currentMapping && this.currentMapping[i] !== undefined) ? this.currentMapping[i] : i;
-                    let vibrations_j = this.crystal.vibrationComponents[j];
+                    let j = (this.currentMapping && this.currentMapping[i] !== undefined) ? this.currentMapping[i] : undefined;
+                    let vibrations_j = j !== undefined ? this.crystal.vibrationComponents[j] : null;
                     let vx_j = 0, vy_j = 0, vz_j = 0;
                     if (vibrations_j) {
                         vx_j = snapRe * vibrations_j[0][0] - snapIm * vibrations_j[0][1];
@@ -113691,40 +113691,35 @@ class SymmetryVisualizer {
      * Compute the atom permutation map for a given symmetry operation.
      * Returns an array `mapping` where `mapping[i] = j`, meaning atom `i`
      * maps to atom `j` under the operation `R * r_i + t`.
+     * If the atom maps outside the visible supercell bounds, it returns undefined.
      */
     getAtomMapping(op) {
-        let phonon = this.crystal.phonon;
-        if (!phonon || !phonon.atom_pos_red) return null;
+        if (!this.crystal.atompos || !this.crystal.atomobjects) return null;
         
         let mapping = [];
-        let R = op.R_frac;
-        let t = op.t_frac;
-        let pos = phonon.atom_pos_red;
-        let types = phonon.atomic_numbers || phonon.atom_numbers;
+        let R = op.R_cart;
+        let t = op.t_cart;
+        let center = this.crystal.geometricCenter;
+        let pos = this.crystal.atompos;
         
         for (let i = 0; i < pos.length; i++) {
-            let r_i = pos[i];
+            let truePos = new Vector3().copy(pos[i]).add(center);
             
             // R * r_i + t
-            let rx = R[0][0]*r_i[0] + R[0][1]*r_i[1] + R[0][2]*r_i[2] + t[0];
-            let ry = R[1][0]*r_i[0] + R[1][1]*r_i[1] + R[1][2]*r_i[2] + t[1];
-            let rz = R[2][0]*r_i[0] + R[2][1]*r_i[1] + R[2][2]*r_i[2] + t[2];
+            let rx = R[0][0]*truePos.x + R[0][1]*truePos.y + R[0][2]*truePos.z + t[0];
+            let ry = R[1][0]*truePos.x + R[1][1]*truePos.y + R[1][2]*truePos.z + t[1];
+            let rz = R[2][0]*truePos.x + R[2][1]*truePos.y + R[2][2]*truePos.z + t[2];
             
-            let match_j = i;
+            let match_j = undefined;
             let minDist = 1e9;
             
             for (let j = 0; j < pos.length; j++) {
-                if (types && types[i] !== types[j]) continue;
+                if (this.crystal.atomobjects[i].atom_number !== this.crystal.atomobjects[j].atom_number) continue;
                 
-                let r_j = pos[j];
-                let dx = rx - r_j[0];
-                let dy = ry - r_j[1];
-                let dz = rz - r_j[2];
-                
-                // Wrap to primitive cell [-0.5, 0.5)
-                dx = dx - Math.round(dx);
-                dy = dy - Math.round(dy);
-                dz = dz - Math.round(dz);
+                let targetPos = new Vector3().copy(pos[j]).add(center);
+                let dx = rx - targetPos.x;
+                let dy = ry - targetPos.y;
+                let dz = rz - targetPos.z;
                 
                 let dist = dx*dx + dy*dy + dz*dz;
                 if (dist < minDist) {
@@ -113733,7 +113728,13 @@ class SymmetryVisualizer {
                 }
             }
             
-            mapping[i] = match_j;
+            // If the atom lands outside the drawn supercell bounds, minDist will be large.
+            // We use a tolerance of 1e-2 Angstroms squared.
+            if (minDist < 1e-2) {
+                mapping[i] = match_j;
+            } else {
+                mapping[i] = undefined;
+            }
         }
         return mapping;
     }
@@ -113851,9 +113852,9 @@ class SymmetryVisualizer {
                 let finalGhostArrow = this.createArrowMesh(0x000000, 0.15);
                 
                 // Get atom j that atom i maps to
-                let j = this.currentMapping ? this.currentMapping[i] : i;
-                let vibrations_j = this.crystal.vibrationComponents[j];
-                let vx_j = vx, vy_j = vy, vz_j = vz;
+                let j = (this.currentMapping && this.currentMapping[i] !== undefined) ? this.currentMapping[i] : undefined;
+                let vibrations_j = j !== undefined ? this.crystal.vibrationComponents[j] : null;
+                let vx_j = 0, vy_j = 0, vz_j = 0;
                 if (vibrations_j) {
                     vx_j = snapRe * vibrations_j[0][0] - snapIm * vibrations_j[0][1];
                     vy_j = snapRe * vibrations_j[1][0] - snapIm * vibrations_j[1][1];
