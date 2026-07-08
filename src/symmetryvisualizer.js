@@ -231,6 +231,20 @@ export class SymmetryVisualizer {
                 isDragging = false;
             });
         }
+
+        // Add ResizeObserver to update the Three.js canvas when the popup is resized
+        if (popupEl && popupEl.length > 0) {
+            try {
+                const resizeObserver = new ResizeObserver(() => {
+                    if (this.refCrystal && this.refCrystal.onWindowResize && popupEl.is(':visible')) {
+                        this.refCrystal.onWindowResize();
+                    }
+                });
+                resizeObserver.observe(popupEl[0]);
+            } catch (e) {
+                console.warn('ResizeObserver not supported in this browser.', e);
+            }
+        }
     }
 
     // ─────────────────────────────────────────────
@@ -474,34 +488,15 @@ export class SymmetryVisualizer {
         this.autoplayPhase += speed * dt;
 
         let hasTrans = this.sliderTransContainer && this.sliderTransContainer.is(':visible');
-        let maxPhase = hasTrans ? 2.0 : 1.0;
+        let maxPhase = 1.0; // Both animate simultaneously
 
         // Add a 1 second pause (0.5 phase at speed 0.5) at the end of the animation
         if (this.autoplayPhase > maxPhase + 0.5) {
             this.autoplayPhase = 0;
         }
 
-        let rotVal = 0;
-        let transVal = 0;
-
-        if (hasTrans) {
-            if (this.autoplayPhase <= 1.0) {
-                rotVal = this.autoplayPhase;
-                transVal = 0;
-            } else if (this.autoplayPhase <= 2.0) {
-                rotVal = 1.0;
-                transVal = this.autoplayPhase - 1.0;
-            } else {
-                rotVal = 1.0;
-                transVal = 1.0;
-            }
-        } else {
-            if (this.autoplayPhase <= 1.0) {
-                rotVal = this.autoplayPhase;
-            } else {
-                rotVal = 1.0;
-            }
-        }
+        let rotVal = this.autoplayPhase;
+        let transVal = hasTrans ? this.autoplayPhase : 0;
 
         rotVal = Math.min(Math.max(rotVal, 0), 1);
         transVal = Math.min(Math.max(transVal, 0), 1);
@@ -1100,6 +1095,44 @@ export class SymmetryVisualizer {
                 } else {
                     this.mainArrows[i].scale.y = 0;
                 }
+
+                // Update ghost arrows position offset and scale dynamically if arrow scale changes
+                let origLength = v_orig.length();
+                let origHalfVisual = origLength * this.crystal.arrowScale * 0.5;
+                if (origLength > 1e-10) {
+                    let nxO = v_orig.x / origLength;
+                    let nyO = v_orig.y / origLength;
+                    let nzO = v_orig.z / origLength;
+                    
+                    if (this.initialGhostArrows && this.initialGhostArrows[i]) {
+                        this.initialGhostArrows[i].scale.y = origLength * this.crystal.arrowScale;
+                        this.initialGhostArrows[i].position.set(
+                            eqPos.x + nxO * origHalfVisual,
+                            eqPos.y + nyO * origHalfVisual,
+                            eqPos.z + nzO * origHalfVisual
+                        );
+                    }
+                    if (this.finalGhostArrows && this.finalGhostArrows[i]) {
+                        this.finalGhostArrows[i].scale.y = origLength * this.crystal.arrowScale;
+                        // finalPos was already calculated, but we must re-calculate it to set position correctly
+                        let truePos = new THREE.Vector3().copy(eqPos).add(center);
+                        let R = op.R_cart;
+                        let t = op.t_cart;
+                        let targetX = R[0][0]*truePos.x + R[0][1]*truePos.y + R[0][2]*truePos.z + t[0];
+                        let targetY = R[1][0]*truePos.x + R[1][1]*truePos.y + R[1][2]*truePos.z + t[1];
+                        let targetZ = R[2][0]*truePos.x + R[2][1]*truePos.y + R[2][2]*truePos.z + t[2];
+                        let finalPos = new THREE.Vector3(targetX, targetY, targetZ).sub(center);
+                        
+                        this.finalGhostArrows[i].position.set(
+                            finalPos.x + nxO * origHalfVisual,
+                            finalPos.y + nyO * origHalfVisual,
+                            finalPos.z + nzO * origHalfVisual
+                        );
+                    }
+                } else {
+                    if (this.initialGhostArrows && this.initialGhostArrows[i]) this.initialGhostArrows[i].scale.y = 0;
+                    if (this.finalGhostArrows && this.finalGhostArrows[i]) this.finalGhostArrows[i].scale.y = 0;
+                }
             }
         }
 
@@ -1245,8 +1278,8 @@ export class SymmetryVisualizer {
             this.crystal.scene.add(mesh);
         } else if (op.label.startsWith('C') || op.label.startsWith('S')) {
             // Draw Rotation axis as a glowing magenta line/cylinder
-            let geom = new THREE.CylinderGeometry(0.06, 0.06, 50, 12);
-            let mat = new THREE.MeshBasicMaterial({ color: 0xff00ff, transparent: true, opacity: 0.8, depthWrite: false });
+            let geom = new THREE.CylinderGeometry(0.02, 0.02, 50, 12);
+            let mat = new THREE.MeshBasicMaterial({ color: 0xff00ff, transparent: true, opacity: 0.5, depthWrite: false });
             let mesh = new THREE.Mesh(geom, mat);
             
             // Align cylinder with axis
@@ -1331,6 +1364,8 @@ export class SymmetryVisualizer {
         let vec_y = new THREE.Vector3(0, 1, 0);
 
         this.mainArrows = [];
+        this.initialGhostArrows = [];
+        this.finalGhostArrows = [];
 
         for (let i = 0; i < this.crystal.atompos.length; i++) {
             let eqPos = this.crystal.atompos[i];
@@ -1403,6 +1438,8 @@ export class SymmetryVisualizer {
                 initialGhostArrow.name = 'symmetry-ghost-arrow-initial';
                 this.crystal.scene.add(initialGhostArrow);
                 this.ghostMeshes.push(initialGhostArrow);
+                if (!this.initialGhostArrows) this.initialGhostArrows = [];
+                this.initialGhostArrows.push(initialGhostArrow);
 
                 // FINAL GHOST ARROW (black, 0.15 opacity)
                 let finalGhostArrow = this.createArrowMesh(0x000000, 0.15);
@@ -1423,10 +1460,12 @@ export class SymmetryVisualizer {
                 finalGhostArrow.name = 'symmetry-ghost-arrow-final';
                 this.crystal.scene.add(finalGhostArrow);
                 this.ghostMeshes.push(finalGhostArrow);
+                if (!this.finalGhostArrows) this.finalGhostArrows = [];
+                this.finalGhostArrows.push(finalGhostArrow);
             }
         }
 
-        // 2. Ghost Bonds at final positions
+        // 2. Ghost Bonds at initial and final positions
         if (this.crystal.bonds && this.crystal.bonds.length > 0) {
             let bondMat = new THREE.MeshLambertMaterial({
                 color: 0x666666,
@@ -1435,19 +1474,42 @@ export class SymmetryVisualizer {
                 depthWrite: false
             });
             let bondGeom = new THREE.CylinderGeometry(0.06, 0.06, 1, 6);
+            let yAxis = new THREE.Vector3(0, 1, 0);
 
             for (let i = 0; i < this.crystal.bonds.length; i++) {
                 let bond = this.crystal.bonds[i];
                 if (!bond.a || !bond.b) continue;
 
-                // Transform endpoints
-                let trueA = new THREE.Vector3().copy(bond.a).add(center);
+                // Find equilibrium positions for this bond by matching the position object reference
+                let aIndex = this.crystal.atomobjects.findIndex(atom => atom.position === bond.a);
+                let bIndex = this.crystal.atomobjects.findIndex(atom => atom.position === bond.b);
+                if (aIndex < 0 || bIndex < 0) continue;
+
+                let eqA = this.crystal.atompos[aIndex];
+                let eqB = this.crystal.atompos[bIndex];
+
+                // INITIAL GHOST BOND
+                let initialMidpoint = new THREE.Vector3().addVectors(eqA, eqB).multiplyScalar(0.5);
+                let initialDir = new THREE.Vector3().subVectors(eqB, eqA);
+                let initialLen = initialDir.length();
+                initialDir.normalize();
+
+                let initialBondMesh = new THREE.Mesh(bondGeom, bondMat);
+                initialBondMesh.position.copy(initialMidpoint);
+                initialBondMesh.scale.set(1, initialLen, 1);
+                initialBondMesh.quaternion.setFromUnitVectors(yAxis, initialDir);
+                initialBondMesh.name = 'symmetry-ghost-bond';
+                this.crystal.scene.add(initialBondMesh);
+                this.ghostMeshes.push(initialBondMesh);
+
+                // Transform endpoints for FINAL GHOST BOND
+                let trueA = new THREE.Vector3().copy(eqA).add(center);
                 let targetAX = R[0][0]*trueA.x + R[0][1]*trueA.y + R[0][2]*trueA.z + t[0];
                 let targetAY = R[1][0]*trueA.x + R[1][1]*trueA.y + R[1][2]*trueA.z + t[1];
                 let targetAZ = R[2][0]*trueA.x + R[2][1]*trueA.y + R[2][2]*trueA.z + t[2];
                 let finalA = new THREE.Vector3(targetAX, targetAY, targetAZ).sub(center);
 
-                let trueB = new THREE.Vector3().copy(bond.b).add(center);
+                let trueB = new THREE.Vector3().copy(eqB).add(center);
                 let targetBX = R[0][0]*trueB.x + R[0][1]*trueB.y + R[0][2]*trueB.z + t[0];
                 let targetBY = R[1][0]*trueB.x + R[1][1]*trueB.y + R[1][2]*trueB.z + t[1];
                 let targetBZ = R[2][0]*trueB.x + R[2][1]*trueB.y + R[2][2]*trueB.z + t[2];
@@ -1458,14 +1520,13 @@ export class SymmetryVisualizer {
                 let len = dir.length();
                 dir.normalize();
 
-                let bondMesh = new THREE.Mesh(bondGeom, bondMat);
-                bondMesh.position.copy(midpoint);
-                bondMesh.scale.set(1, len, 1);
-                let yAxis = new THREE.Vector3(0, 1, 0);
-                bondMesh.quaternion.setFromUnitVectors(yAxis, dir);
-                bondMesh.name = 'symmetry-ghost-bond';
-                this.crystal.scene.add(bondMesh);
-                this.ghostMeshes.push(bondMesh);
+                let finalBondMesh = new THREE.Mesh(bondGeom, bondMat);
+                finalBondMesh.position.copy(midpoint);
+                finalBondMesh.scale.set(1, len, 1);
+                finalBondMesh.quaternion.setFromUnitVectors(yAxis, dir);
+                finalBondMesh.name = 'symmetry-ghost-bond';
+                this.crystal.scene.add(finalBondMesh);
+                this.ghostMeshes.push(finalBondMesh);
             }
         }
 

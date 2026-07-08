@@ -773,6 +773,9 @@ export class PhononWebpage {
             this.dispersion.selectModePoint(this.phonon, this.k, this.n);
         }
         this.updateSelectedModeInfoUI();
+        if (typeof this.onModeChanged === 'function') {
+            this.onModeChanged();
+        }
     }
 
     updateSelectedModeInfoUI() {
