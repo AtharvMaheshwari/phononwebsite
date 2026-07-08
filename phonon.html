@@ -298,9 +298,11 @@
                             <div class="sym-controls-row">
                                 <input type="checkbox" id="sym-show-ghost-atoms" checked>
                                 <label for="sym-show-ghost-atoms" class="sym-checkbox-label" style="margin-right: 15px;">Show Ghost Atoms</label>
-                                <input type="checkbox" id="sym-show-bonds">
+                                <input type="checkbox" id="sym-show-bonds" checked>
                                 <label for="sym-show-bonds" class="sym-checkbox-label" style="margin-right: 15px;">Show Ghost Bonds</label>
-                                <input type="checkbox" id="sym-show-planes" checked>
+                            </div>
+                            <div class="sym-controls-row" style="margin-top: 5px;">
+                                <input type="checkbox" id="sym-show-planes">
                                 <label for="sym-show-planes" class="sym-checkbox-label">Show Planes</label>
                             </div>
                             <div class="sym-controls-row" style="margin-top: 10px;">
@@ -309,7 +311,7 @@
                         </div>
                         
                         <!-- Reference Crystal Popup -->
-                        <div id="sym-reference-popup" style="display: none; position: absolute; top: 20px; right: 20px; width: 400px; height: 450px; background: white; border: 1px solid #ccc; box-shadow: 0 4px 8px rgba(0,0,0,0.2); z-index: 1000; flex-direction: column; border-radius: 6px; overflow: hidden;">
+                        <div id="sym-reference-popup" style="display: none; position: absolute; top: 20px; right: 20px; width: 400px; height: 450px; background: white; border: 1px solid #ccc; box-shadow: 0 4px 8px rgba(0,0,0,0.2); z-index: 1000; flex-direction: column; border-radius: 6px; overflow: hidden; resize: both;">
                             <div id="sym-reference-header" style="padding: 10px 15px; background: #f1f5f9; border-bottom: 1px solid #e2e8f0; cursor: move; display: flex; justify-content: space-between; align-items: center; user-select: none;">
                                 <strong style="color: #0f172a; font-family: 'Open Sans', sans-serif; font-size: 14px;">Reference Crystal</strong>
                                 <div>
