@@ -38,25 +38,32 @@ export class PhononHighcharts {
         this.top_labels_formatter = function(phonon) {
             return function() {
                 let dist = this.value;
+                
+                let formatPG = function(pg) {
+                    if (!pg) return '';
+                    // Convert "D6h" to "D<sub>6h</sub>"
+                    return pg.replace(/^([A-Z])([0-9a-z]+)$/, '$1<sub>$2</sub>');
+                };
+                
                 // Check if this tick is at a high-symmetry point
                 if (phonon.highsym_point_group_map) {
-                    let tol = 1e-6;
+                    let tol = 1e-4;
                     for (let d in phonon.highsym_point_group_map) {
                         if (Math.abs(dist - Number(d)) < tol) {
                             let pg = phonon.highsym_point_group_map[d];
-                            return '<span style="color:#0066cc; font-size:11px; font-weight:600;">' + pg + '</span>';
+                            return '<span style="color:#0066cc; font-size:11px; font-weight:600;">' + formatPG(pg) + '</span>';
                         }
                     }
                 }
                 // Check if this tick is a segment midpoint
                 if (phonon.segment_point_group_list) {
-                    let tol = 1e-6;
+                    let tol = 1e-4;
                     for (let i = 0; i < phonon.segment_point_group_list.length; i++) {
                         let seg = phonon.segment_point_group_list[i];
                         let mid = (seg.start + seg.end) / 2.0;
                         if (Math.abs(dist - mid) < tol) {
                             let pg = seg.point_group;
-                            return '<span style="color:#888888; font-size:10px; font-style:italic;">' + pg + '</span>';
+                            return '<span style="color:#888888; font-size:10px; font-style:italic;">' + formatPG(pg) + '</span>';
                         }
                     }
                 }

@@ -145,7 +145,15 @@ export async function computeSymmetry(phonon) {
         });
     }
     
-    phonon.segment_point_group_list = segment_point_groups;
+    phonon.segment_point_group_list = [];
+    for (let s of segment_point_groups) {
+        phonon.segment_point_group_list.push({
+            start: s.start,
+            end: s.end,
+            point_group: s.point_group,
+            rotations: s.rotations
+        });
+    }
     phonon.segment_point_groups = segment_point_groups; // for PhononPropertyCalculator
     
     // Now compute the point group for each high-symmetry point
