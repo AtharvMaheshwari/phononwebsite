@@ -871,26 +871,10 @@ export class SymmetryVisualizer {
             let R_frac = rots[i];
             let t_frac = trans[i];
 
-            // Auto-shift the operation pivot to the center of the drawn supercell
-            // T_frac = round(center_frac - R_frac * center_frac - t_frac)
-            let R_center = [0, 0, 0];
-            for (let r = 0; r < 3; r++) {
-                for (let c = 0; c < 3; c++) {
-                    R_center[r] += R_frac[r][c] * centerFrac[c];
-                }
-            }
-            
-            let T_frac = [
-                Math.round(centerFrac[0] - R_center[0] - t_frac[0]),
-                Math.round(centerFrac[1] - R_center[1] - t_frac[1]),
-                Math.round(centerFrac[2] - R_center[2] - t_frac[2])
-            ];
-            
-            let t_frac_shifted = [
-                t_frac[0] + T_frac[0],
-                t_frac[1] + T_frac[1],
-                t_frac[2] + T_frac[2]
-            ];
+            // We use the pure crystallographic symmetry without trying to
+            // re-center it on the supercell, as that breaks the mapping to the
+            // true periodic replicas and ghost lattice.
+            let t_frac_shifted = [t_frac[0], t_frac[1], t_frac[2]];
 
             // Convert to Cartesian
             let R_cart = this.fractionalToCartesianRotation(R_frac, lat);
