@@ -197,12 +197,10 @@ export class SymmetryVisualizer {
                     isSyncing = true;
                     this.refCrystal.camera.position.copy(this.crystal.camera.position);
                     this.refCrystal.camera.quaternion.copy(this.crystal.camera.quaternion);
-                    this.refCrystal.camera.up.copy(this.crystal.camera.up);
                     this.refCrystal.camera.zoom = this.crystal.camera.zoom;
                     this.refCrystal.camera.updateProjectionMatrix();
                     if (this.crystal.controls && this.refCrystal.controls) {
                         this.refCrystal.controls.target.copy(this.crystal.controls.target);
-                        this.refCrystal.controls.update(); // Important for TrackballControls
                     }
                     this.refCrystal.needsRender = true;
                     this.refCrystal.startAnimationLoop();
@@ -216,12 +214,10 @@ export class SymmetryVisualizer {
                     isSyncing = true;
                     this.crystal.camera.position.copy(this.refCrystal.camera.position);
                     this.crystal.camera.quaternion.copy(this.refCrystal.camera.quaternion);
-                    this.crystal.camera.up.copy(this.refCrystal.camera.up);
                     this.crystal.camera.zoom = this.refCrystal.camera.zoom;
                     this.crystal.camera.updateProjectionMatrix();
                     if (this.crystal.controls && this.refCrystal.controls) {
                         this.crystal.controls.target.copy(this.refCrystal.controls.target);
-                        this.crystal.controls.update(); // Important for TrackballControls
                     }
                     this.crystal.needsRender = true;
                     this.crystal.startAnimationLoop();
@@ -723,7 +719,7 @@ export class SymmetryVisualizer {
     /**
      * Classify a symmetry operation and return a human-readable label.
      */
-    classifyOperation(R_frac, t_frac, axis, hasResidualTranslation) {
+    classifyOperation(R_frac, t_frac, axis) {
         let detR = Math.round(
             R_frac[0][0]*(R_frac[1][1]*R_frac[2][2] - R_frac[2][1]*R_frac[1][2]) -
             R_frac[0][1]*(R_frac[1][0]*R_frac[2][2] - R_frac[1][2]*R_frac[2][0]) +
@@ -731,9 +727,11 @@ export class SymmetryVisualizer {
         );
         let tr = Math.round(R_frac[0][0] + R_frac[1][1] + R_frac[2][2]);
 
-        // Only show + τ if there is a genuine residual translation (screw/glide)
-        // that could not be absorbed by choosing a better pivot point
-        let tLabel = hasResidualTranslation ? ' + τ' : '';
+        // Check if translation is non-zero (screw/glide)
+        let hasTranslation = (Math.abs(t_frac[0]) > 1e-6 ||
+                              Math.abs(t_frac[1]) > 1e-6 ||
+                              Math.abs(t_frac[2]) > 1e-6);
+        let tLabel = hasTranslation ? ' + τ' : '';
         
         let formatAxis = (ax) => {
             if (!ax) return "";
@@ -851,116 +849,6 @@ export class SymmetryVisualizer {
     // PRECOMPUTATION
     // ─────────────────────────────────────────────
 
-    /**
-     * Find the optimal pivot point p (in Cartesian) such that applying
-     * the operation {R|t} about p eliminates as much translation as possible.
-     *
-     * The operation r → R·r + t about the origin is equivalent to
-     * r → R·(r−p) + p + t_residual about pivot p, where:
-     *   (I − R)·p = t − t_residual
-     *
-     * For inversion (R = −I): p = t/2, residual = 0
-     * For reflection: absorb the component of t along the mirror normal,
-     *   residual = component of t in the mirror plane (glide component)
-     * For rotation: absorb the component of t perpendicular to the axis,
-     *   residual = component of t along the axis (screw component)
-     * For improper rotation (S_n): solve via pseudo-inverse
-     */
-    computePivotAndResidual(R_cart, t_cart, axis, angle, isImproper) {
-        let tx = t_cart[0], ty = t_cart[1], tz = t_cart[2];
-        let tMag = Math.sqrt(tx*tx + ty*ty + tz*tz);
-        if (tMag < 1e-8) {
-            // No translation — pivot at origin, no residual
-            return { pivot: [0, 0, 0], t_residual: [0, 0, 0] };
-        }
-
-        let R = R_cart;
-        let det = Math.round(
-            R[0][0]*(R[1][1]*R[2][2] - R[2][1]*R[1][2]) -
-            R[0][1]*(R[1][0]*R[2][2] - R[1][2]*R[2][0]) +
-            R[0][2]*(R[1][0]*R[2][1] - R[1][1]*R[2][0])
-        );
-        let tr = R[0][0] + R[1][1] + R[2][2];
-        let trRound = Math.round(tr);
-
-        // Inversion: R = -I, so (I - R) = 2I → p = t/2
-        if (det === -1 && trRound === -3) {
-            return {
-                pivot: [tx/2, ty/2, tz/2],
-                t_residual: [0, 0, 0]
-            };
-        }
-
-        // Reflection (det = -1, trace = 1): axis is the mirror normal
-        // Component of t along normal can be absorbed (shift the plane)
-        // Component of t in the plane is the glide and cannot be absorbed
-        if (det === -1 && trRound === 1 && axis) {
-            let nx = axis.x, ny = axis.y, nz = axis.z;
-            // t_perp = (t · n) n  — absorbable by shifting the plane
-            let t_dot_n = tx*nx + ty*ny + tz*nz;
-            let t_perp = [t_dot_n * nx, t_dot_n * ny, t_dot_n * nz];
-            // t_parallel = t - t_perp — glide component (residual)
-            let t_par = [tx - t_perp[0], ty - t_perp[1], tz - t_perp[2]];
-            // Pivot: shift along normal by t_perp/2
-            let pivot = [t_perp[0]/2, t_perp[1]/2, t_perp[2]/2];
-            return { pivot: pivot, t_residual: t_par };
-        }
-
-        // Proper rotation (det = 1, not identity): axis is the rotation axis
-        // Component of t along axis is the screw (residual)
-        // Component of t perpendicular to axis can be absorbed (shift the axis)
-        if (det === 1 && trRound !== 3 && axis && angle > 1e-4) {
-            let nx = axis.x, ny = axis.y, nz = axis.z;
-            // t_along = (t · n) n — screw component (residual)
-            let t_dot_n = tx*nx + ty*ny + tz*nz;
-            let t_along = [t_dot_n * nx, t_dot_n * ny, t_dot_n * nz];
-            // t_perp = t - t_along — can be absorbed
-            let t_perp = [tx - t_along[0], ty - t_along[1], tz - t_along[2]];
-            // Solve (I - R) * p = t_perp for the perpendicular components
-            // Use the formula: p = [(I - R)^T (I - R)]^{-1} (I - R)^T t_perp
-            // For a rotation by angle θ about axis n, the pseudo-inverse gives:
-            // p = (1/2) t_perp + (1/2) cot(θ/2) (n × t_perp)
-            let halfAngle = angle / 2;
-            let cotHalf = Math.cos(halfAngle) / Math.sin(halfAngle);
-            // n × t_perp
-            let cross = [
-                ny * t_perp[2] - nz * t_perp[1],
-                nz * t_perp[0] - nx * t_perp[2],
-                nx * t_perp[1] - ny * t_perp[0]
-            ];
-            let pivot = [
-                0.5 * t_perp[0] + 0.5 * cotHalf * cross[0],
-                0.5 * t_perp[1] + 0.5 * cotHalf * cross[1],
-                0.5 * t_perp[2] + 0.5 * cotHalf * cross[2]
-            ];
-            return { pivot: pivot, t_residual: t_along };
-        }
-
-        // Improper rotation S_n (det = -1, not mirror, not inversion)
-        // For S_n, the proper part is C_n, and the reflection is across the plane ⊥ axis.
-        // We can solve (I - R) p = t using the pseudo-inverse.
-        // (I - R) for S_n is always invertible (no eigenvalue 1), so we can solve directly.
-        if (det === -1 && trRound !== -3 && trRound !== 1) {
-            let ImR = [
-                [1 - R[0][0], -R[0][1], -R[0][2]],
-                [-R[1][0], 1 - R[1][1], -R[1][2]],
-                [-R[2][0], -R[2][1], 1 - R[2][2]]
-            ];
-            let ImR_inv = mat.matrix_inverse(ImR);
-            if (ImR_inv) {
-                let pivot = [
-                    ImR_inv[0][0]*tx + ImR_inv[0][1]*ty + ImR_inv[0][2]*tz,
-                    ImR_inv[1][0]*tx + ImR_inv[1][1]*ty + ImR_inv[1][2]*tz,
-                    ImR_inv[2][0]*tx + ImR_inv[2][1]*ty + ImR_inv[2][2]*tz
-                ];
-                return { pivot: pivot, t_residual: [0, 0, 0] };
-            }
-        }
-
-        // Fallback: no optimization possible
-        return { pivot: [0, 0, 0], t_residual: [tx, ty, tz] };
-    }
-
     precomputeOperations() {
         let rots = this.phonon.crystal_symmetries.rotations;
         let trans = this.phonon.crystal_symmetries.translations;
@@ -1011,38 +899,19 @@ export class SymmetryVisualizer {
             // Orthonormalize to prevent numerical drift
             R_cart = this.orthonormalize(R_cart);
 
-            // The full Cartesian translation (for atom mapping / final position)
-            let t_cart_full = this.fractionalToCartesianTranslation(t_frac_shifted, lat);
-
-            // The INTRINSIC crystallographic translation (from spglib, no centering)
-            // This is what determines screw/glide character
-            let t_cart_intrinsic = this.fractionalToCartesianTranslation(t_frac, lat);
-
-            // The centering shift (a pure lattice vector, not part of the symmetry)
-            let T_cart = this.fractionalToCartesianTranslation(T_frac, lat);
+            let t_cart = this.fractionalToCartesianTranslation(t_frac_shifted, lat);
 
             // Extract axis and angle
             let { axis, angle, isImproper } = this.extractAxisAngle(R_cart);
 
-            // Compute optimal pivot point from INTRINSIC translation only
-            // This way pure rotations/reflections (t_frac=0) get pivot=0, residual=0
-            let { pivot, t_residual } = this.computePivotAndResidual(R_cart, t_cart_intrinsic, axis, angle, isImproper);
-
-            // Check if residual translation is significant
-            let residualMag = Math.sqrt(t_residual[0]*t_residual[0] + t_residual[1]*t_residual[1] + t_residual[2]*t_residual[2]);
-            let hasResidualTranslation = residualMag > 1e-4;
-
-            // Human-readable label (only shows + τ for genuine screws/glides)
-            let label = this.classifyOperation(R_frac, t_frac, axis, hasResidualTranslation);
+            // Human-readable label
+            let label = this.classifyOperation(R_frac, t_frac, axis);
 
             this.cartesianOps.push({
                 R_frac,
                 t_frac,
                 R_cart,
-                t_cart: t_cart_full,
-                pivot_cart: pivot,
-                t_residual: t_residual,
-                T_centering: T_cart,
+                t_cart,
                 axis,
                 angle,
                 isImproper,
@@ -1119,7 +988,6 @@ export class SymmetryVisualizer {
                     continue; // Skip operations not in the little group
                 }
             }
-
             
             validOpsCount++;
 
@@ -1157,9 +1025,8 @@ export class SymmetryVisualizer {
         if (this.sliderRotEl) this.sliderRotEl.val(0);
         if (this.sliderTransEl) this.sliderTransEl.val(0);
 
-        // Check if there is a residual translation component (genuine screw/glide)
-        let tr = op.t_residual || [0,0,0];
-        let hasTrans = (Math.abs(tr[0]) > 1e-4 || Math.abs(tr[1]) > 1e-4 || Math.abs(tr[2]) > 1e-4);
+        // Check if there is a translation component
+        let hasTrans = (Math.abs(op.t_cart[0]) > 1e-4 || Math.abs(op.t_cart[1]) > 1e-4 || Math.abs(op.t_cart[2]) > 1e-4);
         let isIdentityRot = (op.label === 'E (Identity)' || (op.angle < 1e-4 && !op.isImproper));
 
         // Show/hide sliders
@@ -1284,10 +1151,6 @@ export class SymmetryVisualizer {
         let nAtoms = this.crystal.atomobjects.length;
         let center = this.crystal.geometricCenter;
 
-        // Pivot point in true crystallographic space
-        let pivot = op.pivot_cart || [0, 0, 0];
-        let pivotVec = new THREE.Vector3(pivot[0], pivot[1], pivot[2]);
-
         let quat_full = new THREE.Quaternion();
 
         if (!op.isImproper) {
@@ -1304,11 +1167,8 @@ export class SymmetryVisualizer {
             // 1. Shift to true crystallographic space (where origin is 0,0,0)
             let truePos = new THREE.Vector3().copy(eqPos).add(center);
 
-            // 2. Translate to pivot frame
-            truePos.sub(pivotVec);
-
             if (op.isImproper) {
-                // Linear interpolation for improper operations (about pivot)
+                // Linear interpolation for improper operations
                 let rx = truePos.x, ry = truePos.y, rz = truePos.z;
                 let R = op.R_cart;
                 
@@ -1325,25 +1185,14 @@ export class SymmetryVisualizer {
                 truePos.applyQuaternion(quat_full);
             }
 
-            // 3. Translate back from pivot frame
-            truePos.add(pivotVec);
-
-            // 4. Shift back to screen space
+            // 2. Shift back to screen space
             newPos.copy(truePos).sub(center);
 
-            // 5. Apply residual translation phase (only genuine screws/glides)
-            let t_res = op.t_residual || [0, 0, 0];
-            newPos.x += tTrans * t_res[0];
-            newPos.y += tTrans * t_res[1];
-            newPos.z += tTrans * t_res[2];
-
-            // 6. Apply centering lattice shift (smooth, proportional to rotation)
-            // This is a pure lattice vector that ensures atoms map to the
-            // nearest periodic image, not part of the symmetry operation itself
-            let T = op.T_centering || [0, 0, 0];
-            newPos.x += tRot * T[0];
-            newPos.y += tRot * T[1];
-            newPos.z += tRot * T[2];
+            // 3. Apply translation phase
+            let tx = op.t_cart[0], ty = op.t_cart[1], tz = op.t_cart[2];
+            newPos.x += tTrans * tx;
+            newPos.y += tTrans * ty;
+            newPos.z += tTrans * tz;
 
             // Update atom position
             this.crystal.atomobjects[i].position.copy(newPos);
@@ -1582,26 +1431,19 @@ export class SymmetryVisualizer {
 
         if (!op || op.label === 'E (Identity)') return;
 
-        // The physical crystallographic origin is at -geometricCenter in viewer space.
-        // The pivot in viewer space = pivot_cart - geometricCenter
-        let geomCenter = this.crystal.geometricCenter;
-        let pivot = op.pivot_cart || [0, 0, 0];
-        let pivotInViewerSpace = new THREE.Vector3(
-            pivot[0] - geomCenter.x,
-            pivot[1] - geomCenter.y,
-            pivot[2] - geomCenter.z
-        );
+        // The physical crystallographic origin is at -geometricCenter in viewer space
+        let center = new THREE.Vector3().copy(this.crystal.geometricCenter).multiplyScalar(-1);
 
         if (op.label.startsWith('i')) {
-            // Draw Inversion center as a glowing amber dot at the pivot
+            // Draw Inversion center as a glowing amber dot
             let geom = new THREE.SphereGeometry(0.2, 16, 16);
             let mat = new THREE.MeshPhongMaterial({ color: 0xffea00, emissive: 0xaa8800, shininess: 100, transparent: true, opacity: 0.9, depthWrite: false });
             let mesh = new THREE.Mesh(geom, mat);
-            mesh.position.copy(pivotInViewerSpace);
+            mesh.position.copy(center);
             this.symElementMesh = mesh;
             this.crystal.scene.add(mesh);
         } else if (op.label.startsWith('σ')) {
-            // Draw Mirror plane as a semi-transparent cyan surface at the pivot
+            // Draw Mirror plane as a semi-transparent cyan surface
             let geom = new THREE.PlaneGeometry(25, 25);
             let mat = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false });
             let mesh = new THREE.Mesh(geom, mat);
@@ -1610,26 +1452,25 @@ export class SymmetryVisualizer {
             let zAxis = new THREE.Vector3(0, 0, 1);
             let quaternion = new THREE.Quaternion().setFromUnitVectors(zAxis, op.axis);
             mesh.quaternion.copy(quaternion);
-            mesh.position.copy(pivotInViewerSpace);
+            mesh.position.copy(center);
 
             this.symElementMesh = mesh;
             this.crystal.scene.add(mesh);
         } else if (op.label.startsWith('C') || op.label.startsWith('S')) {
-            // Draw Rotation axis as a glowing magenta line/cylinder, passing through the pivot
+            // Draw Rotation axis as a glowing magenta line/cylinder
             let geom = new THREE.CylinderGeometry(0.02, 0.02, 50, 12);
             let mat = new THREE.MeshBasicMaterial({ color: 0xff00ff, transparent: true, opacity: 0.5, depthWrite: false });
             let mesh = new THREE.Mesh(geom, mat);
             
-            // Align cylinder with axis, centered on the pivot
+            // Align cylinder with axis
             let yAxis = new THREE.Vector3(0, 1, 0);
             let quaternion = new THREE.Quaternion().setFromUnitVectors(yAxis, op.axis);
             mesh.quaternion.copy(quaternion);
-            mesh.position.copy(pivotInViewerSpace);
+            mesh.position.copy(center);
 
             this.symElementMesh = mesh;
             this.crystal.scene.add(mesh);
         }
-
     }
 
     // ─────────────────────────────────────────────
