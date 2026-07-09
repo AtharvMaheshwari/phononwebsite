@@ -115,7 +115,7 @@ class PwIn():
 
         cell = (lat,positions,atypes)
 
-        spacegroup = spglib.get_spacegroup(cell,symprec=1e-5)
+        spacegroup = spglib.get_spacegroup(cell,symprec=1e-4)
         return spacegroup
 
     def get_masses(self):

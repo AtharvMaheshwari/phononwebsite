@@ -198,7 +198,8 @@ def compute_pam_properties(phonon_obj):
                 continue
             
             # Group bands into degenerate manifolds
-            tol = 1e-5
+            # Use a tolerance of 0.1 cm⁻¹ to reliably catch DFT degeneracies
+            tol = 1e-1
             visited = np.zeros(nphons, dtype=bool)
             
             for ibnd in range(nphons):
@@ -242,11 +243,10 @@ def compute_pam_properties(phonon_obj):
                         for b in range(m_size):
                             M_D[a, b] = np.vdot(basis[a], np.dot(D, basis[b]))
                             
-                    # Use Schur decomposition to guarantee perfectly orthogonal eigenvectors
-                    from scipy.linalg import schur
-                    T, U = schur(M_D, output='complex')
-                    eigvals_D = np.diag(T)
-                    eigvecs_D = U
+                    # Diagonalize M_D to get symmetry-adapted (circularly polarized) eigenstates.
+                    # M_D is the projection of a unitary operator, so its eigenvectors are the
+                    # correct basis that diagonalizes the symmetry operation.
+                    eigvals_D, eigvecs_D = np.linalg.eig(M_D)
                     
                     # Compute adapted modes
                     adapted_modes = []

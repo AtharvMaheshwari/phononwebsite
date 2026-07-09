@@ -9,7 +9,7 @@ SYMMORPHIC_SPACE_GROUPS = {
     200, 202, 204, 207, 209, 211, 215, 216, 217, 219, 221, 225, 229
 }
 
-def get_crystal_symmetry(cell, symprec=1e-5):
+def get_crystal_symmetry(cell, symprec=1e-4):
     """
     Get the spacegroup name, spacegroup number, and whether the crystal is symmorphic.
     
@@ -38,7 +38,7 @@ def get_crystal_symmetry(cell, symprec=1e-5):
         "symmorphic": is_symmorphic
     }
 
-def get_little_group_ops(cell, q, symprec=1e-5):
+def get_little_group_ops(cell, q, symprec=1e-4):
     """
     Find the symmetry operations in the space group that leave wavevector q invariant
     (modulo reciprocal lattice vectors).
@@ -92,7 +92,7 @@ def get_little_group_ops(cell, q, symprec=1e-5):
         "indices": lg_indices
     }
 
-def get_little_group_point_group(cell, q, symprec=1e-5):
+def get_little_group_point_group(cell, q, symprec=1e-4):
     """
     Determine the Hermann-Mauguin point group symbol of the little group at wavevector q.
     
@@ -129,7 +129,7 @@ def get_little_group_point_group(cell, q, symprec=1e-5):
     return hm_to_schoenflies.get(hm_symbol, hm_symbol)
 
 
-def get_symmetry_labels_for_path(cell, qpoints, highsym_qpts, symprec=1e-5):
+def get_symmetry_labels_for_path(cell, qpoints, highsym_qpts, symprec=1e-4):
     """
     Compute the point group label at every high-symmetry q-point, and at
     the midpoint of every path segment between consecutive high-symmetry points.
