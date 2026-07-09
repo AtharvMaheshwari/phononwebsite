@@ -965,27 +965,26 @@ export class SymmetryVisualizer {
             if (op.label === 'E (Identity)') continue; // Skip identity operation
             
             if (q_cart && lat) {
-                // R_cart * q_cart
-                let Rq_cart = [
-                    op.R_cart[0][0]*q_cart[0] + op.R_cart[0][1]*q_cart[1] + op.R_cart[0][2]*q_cart[2],
-                    op.R_cart[1][0]*q_cart[0] + op.R_cart[1][1]*q_cart[1] + op.R_cart[1][2]*q_cart[2],
-                    op.R_cart[2][0]*q_cart[0] + op.R_cart[2][1]*q_cart[1] + op.R_cart[2][2]*q_cart[2]
+                // The correct little group condition in fractional space:
+                // A symmetry operation R (integer matrix in direct-lattice basis) acts on
+                // a q-vector in fractional reciprocal coordinates as q → R^{-T} q.
+                // The operation is in the little group iff R^{-T} q - q is an integer vector
+                // (i.e., a reciprocal lattice vector G).
+                let q = this.crystal.phononweb.phonon.kpoints[this.crystal.phononweb.k];
+                let R = op.R_frac;
+                let R_inv = mat.matrix_inverse(R);
+                if (!R_inv) continue;
+                let Rinv_T = mat.matrix_transpose(R_inv);
+
+                let Rq = [
+                    Rinv_T[0][0]*q[0] + Rinv_T[0][1]*q[1] + Rinv_T[0][2]*q[2],
+                    Rinv_T[1][0]*q[0] + Rinv_T[1][1]*q[1] + Rinv_T[1][2]*q[2],
+                    Rinv_T[2][0]*q[0] + Rinv_T[2][1]*q[1] + Rinv_T[2][2]*q[2]
                 ];
-                let dq_cart = [
-                    Rq_cart[0] - q_cart[0],
-                    Rq_cart[1] - q_cart[1],
-                    Rq_cart[2] - q_cart[2]
-                ];
-                
-                // Check if dq_cart is a reciprocal lattice vector
-                let G_frac = [
-                    mat.vec_dot(dq_cart, lat[0]),
-                    mat.vec_dot(dq_cart, lat[1]),
-                    mat.vec_dot(dq_cart, lat[2])
-                ];
-                
-                let isInteger = (val) => Math.abs(val - Math.round(val)) < 1e-3;
-                if (!isInteger(G_frac[0]) || !isInteger(G_frac[1]) || !isInteger(G_frac[2])) {
+                let dq = [Rq[0] - q[0], Rq[1] - q[1], Rq[2] - q[2]];
+
+                let isInteger = (val) => Math.abs(val - Math.round(val)) < 1e-2;
+                if (!isInteger(dq[0]) || !isInteger(dq[1]) || !isInteger(dq[2])) {
                     continue; // Skip operations not in the little group
                 }
             }
@@ -993,7 +992,7 @@ export class SymmetryVisualizer {
             validOpsCount++;
 
             let angleDeg = Math.round(op.angle * 180 / Math.PI);
-            let displayLabel = `#${i}: ${op.label}`;
+            let displayLabel = `${op.label}`;
             if (!op.isImproper && angleDeg > 0) {
                 displayLabel += ` [${angleDeg}°]`;
             }
@@ -1042,7 +1041,13 @@ export class SymmetryVisualizer {
             } else {
                 this.sliderRotContainer.show();
                 if (this.sliderRotLabel) {
-                    this.sliderRotLabel.text(op.isImproper ? "Reflection / Inversion:" : "Rotation:");
+                    let rotText = "Rotation:";
+                    if (op.isImproper) {
+                        if (op.label.startsWith('i')) rotText = "Inversion:";
+                        else if (op.label.startsWith('σ')) rotText = "Reflection:";
+                        else rotText = "Improper Rotation:";
+                    }
+                    this.sliderRotLabel.text(rotText);
                 }
             }
         }

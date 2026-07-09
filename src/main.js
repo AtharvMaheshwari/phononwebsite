@@ -156,6 +156,12 @@ v.update = function(phononweb) {
 };
 // Deactivate symmetry animator when material changes
 p.onMaterialChanged = () => symViz.onMaterialChanged();
+// Auto-close symmetry reference viewer when q-point/mode is changed
+p.onModeChanged = () => {
+    if ($('#sym-reference-popup').is(':visible')) {
+        $('#sym-reference-close-btn').click();
+    }
+};
 
 // check if webgl is available
 if ( ! Detector.webgl ) {

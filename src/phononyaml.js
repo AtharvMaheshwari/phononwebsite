@@ -54,13 +54,24 @@ export class PhononYaml {
 
     }
 
-    getFromString(string,callback) {
+    async getFromString(string,callback) {
         /*
         yaml is the content of "band.yaml" file as a string
         */
 
         let phononyaml = jsyaml.load(string);
         this.getFromYaml(phononyaml);
+        
+        try {
+            let symmetry = await import('./symmetry.js');
+            await symmetry.computeSymmetry(this);
+            
+            // Note: If you want to compute chiral/PAM properties on the fly for YAML as well,
+            // you can do it here by importing phonon_properties.js
+        } catch (e) {
+            console.error("Failed to compute symmetry for YAML:", e);
+        }
+        
         callback();
     }
 

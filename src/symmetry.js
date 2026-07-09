@@ -32,7 +32,7 @@ export async function computeSymmetry(phonon) {
     let flat_lat = new Float64Array(9);
     for (let i=0; i<3; i++) {
         for (let j=0; j<3; j++) {
-            flat_lat[i*3 + j] = lat[i][j];
+            flat_lat[i*3 + j] = lat[j][i];
         }
     }
     
