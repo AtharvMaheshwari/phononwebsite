@@ -572,15 +572,16 @@ export class SymmetryVisualizer {
 
     /**
      * Convert a fractional 3×3 rotation matrix R_frac to Cartesian space.
-     * R_cart = L · R_frac · L^{-1}
-     * where L is the lattice matrix (rows are lattice vectors a, b, c).
+     * R_cart = L^T · R_frac · L^{-T}
+     * where 'lat' has lattice vectors a, b, c as rows. So L^T is the matrix 
+     * with lattice vectors as columns.
      */
     fractionalToCartesianRotation(R_frac, lat) {
-        let L = lat;             // 3×3 lattice vectors
-        let L_inv = mat.matrix_inverse(L);
-        if (!L_inv) return null;
-        let temp = mat.matrix_multiply(L, R_frac);
-        return mat.matrix_multiply(temp, L_inv);
+        let L_T = mat.matrix_transpose(lat);
+        let L_T_inv = mat.matrix_inverse(L_T);
+        if (!L_T_inv) return null;
+        let temp = mat.matrix_multiply(L_T, R_frac);
+        return mat.matrix_multiply(temp, L_T_inv);
     }
 
     /**
