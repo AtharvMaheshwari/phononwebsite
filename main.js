@@ -99948,25 +99948,32 @@ class PhononHighcharts {
         this.top_labels_formatter = function(phonon) {
             return function() {
                 let dist = this.value;
+                
+                let formatPG = function(pg) {
+                    if (!pg) return '';
+                    // Convert "D6h" to "D<sub>6h</sub>"
+                    return pg.replace(/^([A-Z])([0-9a-z]+)$/, '$1<sub>$2</sub>');
+                };
+                
                 // Check if this tick is at a high-symmetry point
                 if (phonon.highsym_point_group_map) {
-                    let tol = 1e-6;
+                    let tol = 1e-4;
                     for (let d in phonon.highsym_point_group_map) {
                         if (Math.abs(dist - Number(d)) < tol) {
                             let pg = phonon.highsym_point_group_map[d];
-                            return '<span style="color:#0066cc; font-size:11px; font-weight:600;">' + pg + '</span>';
+                            return '<span style="color:#0066cc; font-size:11px; font-weight:600;">' + formatPG(pg) + '</span>';
                         }
                     }
                 }
                 // Check if this tick is a segment midpoint
                 if (phonon.segment_point_group_list) {
-                    let tol = 1e-6;
+                    let tol = 1e-4;
                     for (let i = 0; i < phonon.segment_point_group_list.length; i++) {
                         let seg = phonon.segment_point_group_list[i];
                         let mid = (seg.start + seg.end) / 2.0;
                         if (Math.abs(dist - mid) < tol) {
                             let pg = seg.point_group;
-                            return '<span style="color:#888888; font-size:10px; font-style:italic;">' + pg + '</span>';
+                            return '<span style="color:#888888; font-size:10px; font-style:italic;">' + formatPG(pg) + '</span>';
                         }
                     }
                 }
@@ -109247,7 +109254,7 @@ async function computeSymmetry(phonon) {
     let flat_lat = new Float64Array(9);
     for (let i=0; i<3; i++) {
         for (let j=0; j<3; j++) {
-            flat_lat[i*3 + j] = lat[i][j];
+            flat_lat[i*3 + j] = lat[j][i];
         }
     }
     
@@ -109360,7 +109367,15 @@ async function computeSymmetry(phonon) {
         });
     }
     
-    phonon.segment_point_group_list = segment_point_groups;
+    phonon.segment_point_group_list = [];
+    for (let s of segment_point_groups) {
+        phonon.segment_point_group_list.push({
+            start: s.start,
+            end: s.end,
+            point_group: s.point_group,
+            rotations: s.rotations
+        });
+    }
     phonon.segment_point_groups = segment_point_groups; // for PhononPropertyCalculator
     
     // Now compute the point group for each high-symmetry point
@@ -109460,6 +109475,13 @@ function identifyPointGroupSymbol(rotations) {
     
     return groups[sig] || "C1"; // fallback to C1 if somehow signature doesn't match
 }
+
+var symmetry = /*#__PURE__*/Object.freeze({
+	__proto__: null,
+	initSpglib: initSpglib,
+	computeSymmetry: computeSymmetry,
+	identifyPointGroupSymbol: identifyPointGroupSymbol
+});
 
 var thz2cm1 = 33.35641;
 
@@ -110714,13 +110736,24 @@ class PhononYaml {
 
     }
 
-    getFromString(string,callback) {
+    async getFromString(string,callback) {
         /*
         yaml is the content of "band.yaml" file as a string
         */
 
         let phononyaml = jsyaml.load(string);
         this.getFromYaml(phononyaml);
+        
+        try {
+            let symmetry$1 = await Promise.resolve().then(function () { return symmetry; });
+            await symmetry$1.computeSymmetry(this);
+            
+            // Note: If you want to compute chiral/PAM properties on the fly for YAML as well,
+            // you can do it here by importing phonon_properties.js
+        } catch (e) {
+            console.error("Failed to compute symmetry for YAML:", e);
+        }
+        
         callback();
     }
 
@@ -112519,15 +112552,72 @@ class SymmetryVisualizer {
         }
 
         if (syncBtn) {
-            syncBtn.on('click', () => {
-                if (this.crystal && this.refCrystal) {
+            this.isCameraSynced = false;
+            
+            // Handlers for two-way sync to avoid infinite loop
+            let isSyncing = false;
+            
+            let syncMainToRef = () => {
+                if (!this.isCameraSynced || isSyncing) return;
+                if (this.crystal && this.refCrystal && this.crystal.camera && this.refCrystal.camera) {
+                    isSyncing = true;
                     this.refCrystal.camera.position.copy(this.crystal.camera.position);
                     this.refCrystal.camera.quaternion.copy(this.crystal.camera.quaternion);
+                    this.refCrystal.camera.zoom = this.crystal.camera.zoom;
+                    this.refCrystal.camera.updateProjectionMatrix();
                     if (this.crystal.controls && this.refCrystal.controls) {
                         this.refCrystal.controls.target.copy(this.crystal.controls.target);
                     }
                     this.refCrystal.needsRender = true;
                     this.refCrystal.startAnimationLoop();
+                    isSyncing = false;
+                }
+            };
+            
+            let syncRefToMain = () => {
+                if (!this.isCameraSynced || isSyncing) return;
+                if (this.crystal && this.refCrystal && this.crystal.camera && this.refCrystal.camera) {
+                    isSyncing = true;
+                    this.crystal.camera.position.copy(this.refCrystal.camera.position);
+                    this.crystal.camera.quaternion.copy(this.refCrystal.camera.quaternion);
+                    this.crystal.camera.zoom = this.refCrystal.camera.zoom;
+                    this.crystal.camera.updateProjectionMatrix();
+                    if (this.crystal.controls && this.refCrystal.controls) {
+                        this.crystal.controls.target.copy(this.refCrystal.controls.target);
+                    }
+                    this.crystal.needsRender = true;
+                    this.crystal.startAnimationLoop();
+                    isSyncing = false;
+                }
+            };
+
+            syncBtn.on('click', () => {
+                this.isCameraSynced = !this.isCameraSynced;
+                if (this.isCameraSynced) {
+                    syncBtn.css({ 'background': '#f59e0b', 'color': 'white' }); // Amber to show active
+                    syncBtn.text('Unsync Camera');
+                    
+                    // Do an initial sync
+                    syncMainToRef();
+                    
+                    // Attach listeners if controls exist
+                    if (this.crystal && this.crystal.controls) {
+                        this.crystal.controls.addEventListener('change', syncMainToRef);
+                    }
+                    if (this.refCrystal && this.refCrystal.controls) {
+                        this.refCrystal.controls.addEventListener('change', syncRefToMain);
+                    }
+                } else {
+                    syncBtn.css({ 'background': '#10b981', 'color': 'white' }); // Green for inactive
+                    syncBtn.text('Sync Camera');
+                    
+                    // Remove listeners
+                    if (this.crystal && this.crystal.controls) {
+                        this.crystal.controls.removeEventListener('change', syncMainToRef);
+                    }
+                    if (this.refCrystal && this.refCrystal.controls) {
+                        this.refCrystal.controls.removeEventListener('change', syncRefToMain);
+                    }
                 }
             });
         }
@@ -112848,15 +112938,16 @@ class SymmetryVisualizer {
 
     /**
      * Convert a fractional 3×3 rotation matrix R_frac to Cartesian space.
-     * R_cart = L · R_frac · L^{-1}
-     * where L is the lattice matrix (rows are lattice vectors a, b, c).
+     * R_cart = L^T · R_frac · L^{-T}
+     * where 'lat' has lattice vectors a, b, c as rows. So L^T is the matrix 
+     * with lattice vectors as columns.
      */
     fractionalToCartesianRotation(R_frac, lat) {
-        let L = lat;             // 3×3 lattice vectors
-        let L_inv = matrix_inverse(L);
-        if (!L_inv) return null;
-        let temp = matrix_multiply(L, R_frac);
-        return matrix_multiply(temp, L_inv);
+        let L_T = matrix_transpose(lat);
+        let L_T_inv = matrix_inverse(L_T);
+        if (!L_T_inv) return null;
+        let temp = matrix_multiply(L_T, R_frac);
+        return matrix_multiply(temp, L_T_inv);
     }
 
     /**
@@ -112995,7 +113086,7 @@ class SymmetryVisualizer {
     /**
      * Classify a symmetry operation and return a human-readable label.
      */
-    classifyOperation(R_frac, t_frac) {
+    classifyOperation(R_frac, t_frac, axis) {
         let detR = Math.round(
             R_frac[0][0]*(R_frac[1][1]*R_frac[2][2] - R_frac[2][1]*R_frac[1][2]) -
             R_frac[0][1]*(R_frac[1][0]*R_frac[2][2] - R_frac[1][2]*R_frac[2][0]) +
@@ -113008,19 +113099,115 @@ class SymmetryVisualizer {
                               Math.abs(t_frac[1]) > 1e-6 ||
                               Math.abs(t_frac[2]) > 1e-6);
         let tLabel = hasTranslation ? ' + τ' : '';
+        
+        let formatAxis = (ax) => {
+            if (!ax) return "";
+            
+            // Try to convert to fractional Miller indices
+            let phonon = this.crystal ? this.crystal.phonon : null;
+            if (phonon && phonon.lat) {
+                let A = matrix_transpose(phonon.lat);
+                let A_inv = matrix_inverse(A);
+                if (A_inv) {
+                    let u = A_inv[0][0]*ax.x + A_inv[0][1]*ax.y + A_inv[0][2]*ax.z;
+                    let v = A_inv[1][0]*ax.x + A_inv[1][1]*ax.y + A_inv[1][2]*ax.z;
+                    let w = A_inv[2][0]*ax.x + A_inv[2][1]*ax.y + A_inv[2][2]*ax.z;
+                    let u_orig = u;
+                    let v_orig = v;
+                    let w_orig = w;
+                    
+                    let maxVal = Math.max(Math.abs(u), Math.abs(v), Math.abs(w));
+                    if (maxVal > 1e-6) {
+                        u /= maxVal;
+                        v /= maxVal;
+                        w /= maxVal;
+                    }
+                    
+                    let bestMult = 1;
+                    for (let m = 1; m <= 12; m++) {
+                        let diff = Math.abs(u*m - Math.round(u*m)) + Math.abs(v*m - Math.round(v*m)) + Math.abs(w*m - Math.round(w*m));
+                        if (diff < 1e-4) {
+                            bestMult = m;
+                            break;
+                        }
+                    }
+                    
+                    let iu = Math.round(u * bestMult);
+                    let iv = Math.round(v * bestMult);
+                    let iw = Math.round(w * bestMult);
+                    
+                    // Check if the lattice is hexagonal/trigonal
+                    let isHex = false;
+                    let lat = phonon.lat;
+                    if (lat) {
+                        let a = Math.sqrt(lat[0][0]*lat[0][0] + lat[0][1]*lat[0][1] + lat[0][2]*lat[0][2]);
+                        let b = Math.sqrt(lat[1][0]*lat[1][0] + lat[1][1]*lat[1][1] + lat[1][2]*lat[1][2]);
+                        let dot = lat[0][0]*lat[1][0] + lat[0][1]*lat[1][1] + lat[0][2]*lat[1][2];
+                        let gamma = Math.acos(dot / (a*b)) * 180 / Math.PI;
+                        // Hexagonal: a=b, gamma=120 or 60
+                        if (Math.abs(a - b) < 1e-3 && (Math.abs(gamma - 120) < 1e-3 || Math.abs(gamma - 60) < 1e-3)) {
+                            isHex = true;
+                        }
+                    }
+                    
+                    if (isHex) {
+                        let U = (2*u_orig - v_orig)/3;
+                        let V = (2*v_orig - u_orig)/3;
+                        let T = -(U + V);
+                        let W = w_orig;
+                        
+                        let maxValHex = Math.max(Math.abs(U), Math.abs(V), Math.abs(T), Math.abs(W));
+                        if (maxValHex > 1e-6) {
+                            U /= maxValHex; V /= maxValHex; T /= maxValHex; W /= maxValHex;
+                        }
+                        
+                        let bestMultHex = 1;
+                        for (let m = 1; m <= 12; m++) {
+                            let diff = Math.abs(U*m - Math.round(U*m)) + Math.abs(V*m - Math.round(V*m)) + Math.abs(T*m - Math.round(T*m)) + Math.abs(W*m - Math.round(W*m));
+                            if (diff < 1e-4) { bestMultHex = m; break; }
+                        }
+                        let iU = Math.round(U * bestMultHex);
+                        let iV = Math.round(V * bestMultHex);
+                        let iT = Math.round(T * bestMultHex);
+                        let iW = Math.round(W * bestMultHex);
+                        
+                        if (iU < 0 || (iU === 0 && iV < 0) || (iU === 0 && iV === 0 && iT < 0) || (iU === 0 && iV === 0 && iT === 0 && iW < 0)) {
+                            iU = -iU; iV = -iV; iT = -iT; iW = -iW;
+                        }
+                        return `[${iU} ${iV} ${iT} ${iW}]`;
+                    }
+                    
+                    // Standardize sign: first non-zero should be positive
+                    if (iu < 0 || (iu === 0 && iv < 0) || (iu === 0 && iv === 0 && iw < 0)) {
+                        iu = -iu; iv = -iv; iw = -iw;
+                    }
+                    
+                    // Formatting negative numbers with an overline would be nice, but standard minus is fine
+                    return `[${iu} ${iv} ${iw}]`;
+                }
+            }
+
+            // Fallback to Cartesian
+            let x = Math.abs(ax.x) < 1e-4 ? 0 : ax.x;
+            let y = Math.abs(ax.y) < 1e-4 ? 0 : ax.y;
+            let z = Math.abs(ax.z) < 1e-4 ? 0 : ax.z;
+            return `[${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)}]`;
+        };
+        let axLabel = axis ? ` ∥ ${formatAxis(axis)}` : '';
+        let perpLabel = axis ? ` ⟂ ${formatAxis(axis)}` : '';
 
         if (detR === 1) {
             if (tr === 3)  return 'E (Identity)';
-            if (tr === -1) return 'C₂ (180° rotation)' + tLabel;
-            if (tr === 0)  return 'C₃ (120° rotation)' + tLabel;
-            if (tr === 1)  return 'C₄ (90° rotation)' + tLabel;
-            if (tr === 2)  return 'C₆ (60° rotation)' + tLabel;
+            if (tr === -1) return 'C₂ (180°)' + axLabel + tLabel;
+            if (tr === 0)  return 'C₃ (120°)' + axLabel + tLabel;
+            if (tr === 1)  return 'C₄ (90°)' + axLabel + tLabel;
+            if (tr === 2)  return 'C₆ (60°)' + axLabel + tLabel;
         } else if (detR === -1) {
             if (tr === -3) return 'i (Inversion)' + tLabel;
-            if (tr === 1)  return 'σ (Mirror)' + tLabel;
-            if (tr === -2) return 'S₃ (Rotoreflection 120°)' + tLabel;
-            if (tr === -1) return 'S₄ (Rotoreflection 90°)' + tLabel;
-            if (tr === 0)  return 'S₆ (Rotoreflection 60°)' + tLabel;
+            if (tr === 1)  return 'σ (Mirror)' + perpLabel + tLabel;
+            if (tr === -2) return 'S₃ (120°)' + axLabel + tLabel;
+            if (tr === -1) return 'S₄ (90°)' + axLabel + tLabel;
+            if (tr === 0)  return 'S₆ (60°)' + axLabel + tLabel;
         }
         return 'Unknown operation';
     }
@@ -113043,7 +113230,7 @@ class SymmetryVisualizer {
             }
             box.getCenter(centerCart);
         }
-        let centerFrac = this.cartesianToFractionalTranslation([centerCart.x, centerCart.y, centerCart.z], lat);
+        this.cartesianToFractionalTranslation([centerCart.x, centerCart.y, centerCart.z], lat);
 
         this.cartesianOps = [];
 
@@ -113051,26 +113238,10 @@ class SymmetryVisualizer {
             let R_frac = rots[i];
             let t_frac = trans[i];
 
-            // Auto-shift the operation pivot to the center of the drawn supercell
-            // T_frac = round(center_frac - R_frac * center_frac - t_frac)
-            let R_center = [0, 0, 0];
-            for (let r = 0; r < 3; r++) {
-                for (let c = 0; c < 3; c++) {
-                    R_center[r] += R_frac[r][c] * centerFrac[c];
-                }
-            }
-            
-            let T_frac = [
-                Math.round(centerFrac[0] - R_center[0] - t_frac[0]),
-                Math.round(centerFrac[1] - R_center[1] - t_frac[1]),
-                Math.round(centerFrac[2] - R_center[2] - t_frac[2])
-            ];
-            
-            let t_frac_shifted = [
-                t_frac[0] + T_frac[0],
-                t_frac[1] + T_frac[1],
-                t_frac[2] + T_frac[2]
-            ];
+            // We use the pure crystallographic symmetry without trying to
+            // re-center it on the supercell, as that breaks the mapping to the
+            // true periodic replicas and ghost lattice.
+            let t_frac_shifted = [t_frac[0], t_frac[1], t_frac[2]];
 
             // Convert to Cartesian
             let R_cart = this.fractionalToCartesianRotation(R_frac, lat);
@@ -113085,7 +113256,7 @@ class SymmetryVisualizer {
             let { axis, angle, isImproper } = this.extractAxisAngle(R_cart);
 
             // Human-readable label
-            let label = this.classifyOperation(R_frac, t_frac);
+            let label = this.classifyOperation(R_frac, t_frac, axis);
 
             this.cartesianOps.push({
                 R_frac,
@@ -113145,27 +113316,26 @@ class SymmetryVisualizer {
             if (op.label === 'E (Identity)') continue; // Skip identity operation
             
             if (q_cart && lat) {
-                // R_cart * q_cart
-                let Rq_cart = [
-                    op.R_cart[0][0]*q_cart[0] + op.R_cart[0][1]*q_cart[1] + op.R_cart[0][2]*q_cart[2],
-                    op.R_cart[1][0]*q_cart[0] + op.R_cart[1][1]*q_cart[1] + op.R_cart[1][2]*q_cart[2],
-                    op.R_cart[2][0]*q_cart[0] + op.R_cart[2][1]*q_cart[1] + op.R_cart[2][2]*q_cart[2]
+                // The correct little group condition in fractional space:
+                // A symmetry operation R (integer matrix in direct-lattice basis) acts on
+                // a q-vector in fractional reciprocal coordinates as q → R^{-T} q.
+                // The operation is in the little group iff R^{-T} q - q is an integer vector
+                // (i.e., a reciprocal lattice vector G).
+                let q = this.crystal.phononweb.phonon.kpoints[this.crystal.phononweb.k];
+                let R = op.R_frac;
+                let R_inv = matrix_inverse(R);
+                if (!R_inv) continue;
+                let Rinv_T = matrix_transpose(R_inv);
+
+                let Rq = [
+                    Rinv_T[0][0]*q[0] + Rinv_T[0][1]*q[1] + Rinv_T[0][2]*q[2],
+                    Rinv_T[1][0]*q[0] + Rinv_T[1][1]*q[1] + Rinv_T[1][2]*q[2],
+                    Rinv_T[2][0]*q[0] + Rinv_T[2][1]*q[1] + Rinv_T[2][2]*q[2]
                 ];
-                let dq_cart = [
-                    Rq_cart[0] - q_cart[0],
-                    Rq_cart[1] - q_cart[1],
-                    Rq_cart[2] - q_cart[2]
-                ];
-                
-                // Check if dq_cart is a reciprocal lattice vector
-                let G_frac = [
-                    vec_dot(dq_cart, lat[0]),
-                    vec_dot(dq_cart, lat[1]),
-                    vec_dot(dq_cart, lat[2])
-                ];
-                
-                let isInteger = (val) => Math.abs(val - Math.round(val)) < 1e-3;
-                if (!isInteger(G_frac[0]) || !isInteger(G_frac[1]) || !isInteger(G_frac[2])) {
+                let dq = [Rq[0] - q[0], Rq[1] - q[1], Rq[2] - q[2]];
+
+                let isInteger = (val) => Math.abs(val - Math.round(val)) < 1e-2;
+                if (!isInteger(dq[0]) || !isInteger(dq[1]) || !isInteger(dq[2])) {
                     continue; // Skip operations not in the little group
                 }
             }
@@ -113173,7 +113343,7 @@ class SymmetryVisualizer {
             validOpsCount++;
 
             let angleDeg = Math.round(op.angle * 180 / Math.PI);
-            let displayLabel = `#${i}: ${op.label}`;
+            let displayLabel = `${op.label}`;
             if (!op.isImproper && angleDeg > 0) {
                 displayLabel += ` [${angleDeg}°]`;
             }
@@ -113222,7 +113392,13 @@ class SymmetryVisualizer {
             } else {
                 this.sliderRotContainer.show();
                 if (this.sliderRotLabel) {
-                    this.sliderRotLabel.text(op.isImproper ? "Reflection / Inversion:" : "Rotation:");
+                    let rotText = "Rotation:";
+                    if (op.isImproper) {
+                        if (op.label.startsWith('i')) rotText = "Inversion:";
+                        else if (op.label.startsWith('σ')) rotText = "Reflection:";
+                        else rotText = "Improper Rotation:";
+                    }
+                    this.sliderRotLabel.text(rotText);
                 }
             }
         }
@@ -113451,7 +113627,9 @@ class SymmetryVisualizer {
 
                 if (this.finalGhostArrows && this.finalGhostArrows[i]) {
                     let j = (this.currentMapping && this.currentMapping[i] !== undefined) ? this.currentMapping[i] : undefined;
-                    let vibrations_j = j !== undefined ? this.crystal.vibrationComponents[j] : null;
+                    
+                    // Use ADAPTED vibration components so degenerate bands scale cleanly
+                    let vibrations_j = j !== undefined ? this.currentAdaptedComponents[j] : null;
                     let vx_j = 0, vy_j = 0, vz_j = 0;
                     if (vibrations_j) {
                         vx_j = snapRe * vibrations_j[0][0] - snapIm * vibrations_j[0][1];
@@ -113687,6 +113865,485 @@ class SymmetryVisualizer {
         return object;
     }
 
+    // ─────────────────────────────────────────────
+    // DEGENERATE BAND ADAPTATION (D-matrix)
+    // ─────────────────────────────────────────────
+
+    /**
+     * For degenerate bands, build the representation matrix D for the selected
+     * symmetry operation, project it into the degenerate subspace, diagonalize,
+     * and return symmetry-adapted (circularly polarized) vibration components.
+     *
+     * Returns adapted vibrationComponents array, or the original if no
+     * adaptation is needed.
+     */
+    getAdaptedVibrationComponents(op) {
+        let phonon = this.crystal.phonon;
+        let phononweb = this.crystal.phononweb;
+        if (!phonon || !phononweb || !phonon.vec || !phonon.eigenvalues) {
+            return this.crystal.vibrationComponents;
+        }
+
+        let k = phononweb.k;
+        let n = phononweb.n;
+        if (!phonon.eigenvalues[k]) return this.crystal.vibrationComponents;
+
+        let freqs = phonon.eigenvalues[k];
+        let currentFreq = freqs[n];
+
+        // Find degenerate manifold (all modes within tolerance of the current mode)
+        let tol = 0.1; // cm⁻¹
+        let manifold = [];
+        for (let m = 0; m < freqs.length; m++) {
+            if (Math.abs(freqs[m] - currentFreq) < tol) {
+                manifold.push(m);
+            }
+        }
+
+        // If non-degenerate, no adaptation needed
+        if (manifold.length <= 1) {
+            return this.crystal.vibrationComponents;
+        }
+
+        // Build the full representation matrix D for this symmetry operation.
+        // D is a (3*natoms x 3*natoms) complex matrix.
+        let natoms = phonon.natoms;
+        let D = this._buildRepresentationMatrix(op, k);
+        if (!D) return this.crystal.vibrationComponents;
+
+        // Get eigenvectors for all modes in the manifold.
+        // phonon.vec[k][m][atom][xyz] = [re, im]
+        let basis = []; // array of complex flat vectors, each length 3*natoms
+        for (let mi = 0; mi < manifold.length; mi++) {
+            let m = manifold[mi];
+            let vec_m = phonon.vec[k][m]; // [natoms][3][2]
+            let flat = new Array(3 * natoms * 2); // interleaved [re, im, re, im, ...]
+            for (let a = 0; a < natoms; a++) {
+                for (let d = 0; d < 3; d++) {
+                    flat[(a * 3 + d) * 2] = vec_m[a][d][0];     // re
+                    flat[(a * 3 + d) * 2 + 1] = vec_m[a][d][1]; // im
+                }
+            }
+            basis.push(flat);
+        }
+
+        // Project D into the degenerate subspace: M_D[a][b] = <basis[a] | D | basis[b]>
+        let mSize = manifold.length;
+        let M_D = []; // mSize x mSize complex (stored as [re, im])
+        for (let a = 0; a < mSize; a++) {
+            M_D[a] = [];
+            for (let b = 0; b < mSize; b++) {
+                // D * basis[b]
+                let Db = this._complexMatVec(D, basis[b], 3 * natoms);
+                // <basis[a] | D*basis[b]>
+                let dot = this._complexDot(basis[a], Db, 3 * natoms);
+                M_D[a][b] = dot; // [re, im]
+            }
+        }
+
+        // Diagonalize M_D to find symmetry-adapted eigenvectors
+        let { eigenvalues, eigenvectors } = this._complexEig(M_D, mSize);
+
+        // Find which adapted mode corresponds to the currently selected mode n.
+        // The adapted mode that has the largest overlap with original mode n.
+        let nIdx = manifold.indexOf(n);
+        if (nIdx < 0) return this.crystal.vibrationComponents;
+
+        // Construct the adapted eigenvector for mode n:
+        // adapted_vec = sum_a eigenvectors[bestIdx][a] * basis[a]
+        // We pick the eigenvector with max overlap with the original mode n.
+        let bestIdx = 0;
+        let bestOverlap = 0;
+        for (let ei = 0; ei < mSize; ei++) {
+            // Overlap = |sum_a conj(eigvec[ei][a]) * delta(a, nIdx)|
+            // = |eigvec[ei][nIdx]|
+            let re = eigenvectors[ei][nIdx][0];
+            let im = eigenvectors[ei][nIdx][1];
+            let overlap = re * re + im * im;
+            if (overlap > bestOverlap) {
+                bestOverlap = overlap;
+                bestIdx = ei;
+            }
+        }
+
+        // Now reconstruct vibrationComponents using the adapted eigenvector.
+        // The adapted primitive-cell eigenvector:
+        let adaptedPrim = new Array(natoms);
+        for (let a = 0; a < natoms; a++) {
+            adaptedPrim[a] = [[0, 0], [0, 0], [0, 0]];
+            for (let d = 0; d < 3; d++) {
+                let re_sum = 0, im_sum = 0;
+                for (let mi = 0; mi < mSize; mi++) {
+                    let coeff_re = eigenvectors[bestIdx][mi][0];
+                    let coeff_im = eigenvectors[bestIdx][mi][1];
+                    let vec_re = basis[mi][(a * 3 + d) * 2];
+                    let vec_im = basis[mi][(a * 3 + d) * 2 + 1];
+                    // complex multiply: (coeff) * (vec)
+                    re_sum += coeff_re * vec_re - coeff_im * vec_im;
+                    im_sum += coeff_re * vec_im + coeff_im * vec_re;
+                }
+                adaptedPrim[a][d] = [re_sum, im_sum];
+            }
+        }
+
+        // Rebuild full vibrationComponents for the supercell using the adapted vector
+        // (replicate the same logic as getVibrations in phononwebpage.js)
+        let kpt = phonon.kpoints[k];
+        let nx = phononweb.nx || 1;
+        let ny = phononweb.ny || 1;
+        let nz = phononweb.nz || 1;
+        let nx_int = parseInt(nx);
+        let ny_int = parseInt(ny);
+        let nz_int = parseInt(nz);
+        let ix_start = -Math.floor(nx_int / 2);
+        let iy_start = -Math.floor(ny_int / 2);
+        let iz_start = -Math.floor(nz_int / 2);
+
+        let adaptedComponents = [];
+
+        for (let ix = ix_start; ix < ix_start + nx_int; ix++) {
+            for (let iy = iy_start; iy < iy_start + ny_int; iy++) {
+                for (let iz = iz_start; iz < iz_start + nz_int; iz++) {
+                    for (let a = 0; a < natoms; a++) {
+                        let atom_phase = 0;
+                        if (phonon.addatomphase) {
+                            atom_phase = vec_dot(kpt, phonon.atom_pos_red[a]);
+                        }
+                        let sprod = vec_dot(kpt, [ix, iy, iz]) + atom_phase;
+                        let angle = sprod * 2.0 * Math.PI;
+                        let phase_re = Math.cos(angle);
+                        let phase_im = Math.sin(angle);
+
+                        let comp = [];
+                        for (let d = 0; d < 3; d++) {
+                            let v_re = adaptedPrim[a][d][0];
+                            let v_im = adaptedPrim[a][d][1];
+                            // (v) * phase
+                            let out_re = v_re * phase_re - v_im * phase_im;
+                            let out_im = v_re * phase_im + v_im * phase_re;
+                            comp.push([out_re, out_im]);
+                        }
+                        adaptedComponents.push(comp);
+                    }
+                }
+            }
+        }
+
+        return adaptedComponents;
+    }
+
+    /**
+     * Build the (3N x 3N) representation matrix D for a symmetry operation at q-point k.
+     * D is stored as a flat array of interleaved [re, im] pairs, row-major.
+     * D[(i*dim + j)*2] = re, D[(i*dim + j)*2 + 1] = im
+     */
+    _buildRepresentationMatrix(op, k) {
+        let phonon = this.crystal.phonon;
+        if (!phonon || !phonon.atom_pos_red || !phonon.lat) return null;
+
+        let natoms = phonon.natoms;
+        let dim = 3 * natoms;
+        let lat = phonon.lat; // 3x3 row-major
+        let pos = phonon.atom_pos_red;
+        let q = phonon.kpoints[k];
+
+        let R_frac = op.R_frac;
+        let tau = op.t_frac;
+
+        // A = lat^T (column vectors of lattice)
+        let A = matrix_transpose(lat);
+        let A_inv = matrix_inverse(A);
+        if (!A_inv) return null;
+
+        // R_cart = A * R_frac * A_inv
+        let R_cart = matrix_multiply(A, matrix_multiply(R_frac, A_inv));
+
+        // D is dim x dim complex, stored interleaved
+        let D = new Float64Array(dim * dim * 2);
+
+        // G = round(R_frac^T_inv * q - q) ... actually G = round(R_q * q - q)
+        // where R_q = (R^-1)^T
+        let R_inv = matrix_inverse(R_frac);
+        if (!R_inv) return null;
+        let R_q = matrix_transpose(R_inv);
+        let Gx = R_q[0][0]*q[0] + R_q[0][1]*q[1] + R_q[0][2]*q[2] - q[0];
+        let Gy = R_q[1][0]*q[0] + R_q[1][1]*q[1] + R_q[1][2]*q[2] - q[1];
+        let Gz = R_q[2][0]*q[0] + R_q[2][1]*q[1] + R_q[2][2]*q[2] - q[2];
+        let G = [Math.round(Gx), Math.round(Gy), Math.round(Gz)];
+
+        for (let i = 0; i < natoms; i++) {
+            // r_prime = R * pos[i] + tau
+            let rp0 = R_frac[0][0]*pos[i][0] + R_frac[0][1]*pos[i][1] + R_frac[0][2]*pos[i][2] + tau[0];
+            let rp1 = R_frac[1][0]*pos[i][0] + R_frac[1][1]*pos[i][1] + R_frac[1][2]*pos[i][2] + tau[1];
+            let rp2 = R_frac[2][0]*pos[i][0] + R_frac[2][1]*pos[i][1] + R_frac[2][2]*pos[i][2] + tau[2];
+
+            // Find j such that pos[j] ≡ r_prime (mod 1)
+            let best_j = 0;
+            let best_dist = 1e9;
+            for (let j = 0; j < natoms; j++) {
+                let dx = rp0 - pos[j][0];
+                let dy = rp1 - pos[j][1];
+                let dz = rp2 - pos[j][2];
+                dx -= Math.round(dx);
+                dy -= Math.round(dy);
+                dz -= Math.round(dz);
+                let dist = dx*dx + dy*dy + dz*dz;
+                if (dist < best_dist) {
+                    best_dist = dist;
+                    best_j = j;
+                }
+            }
+
+            // phase = exp(-2πi G · pos[j])
+            let Gdot = G[0]*pos[best_j][0] + G[1]*pos[best_j][1] + G[2]*pos[best_j][2];
+            let phase_angle = -2.0 * Math.PI * Gdot;
+            let phase_re = Math.cos(phase_angle);
+            let phase_im = Math.sin(phase_angle);
+
+            // D[3j:3j+3, 3i:3i+3] = phase * R_cart
+            for (let r = 0; r < 3; r++) {
+                for (let c = 0; c < 3; c++) {
+                    let row = 3 * best_j + r;
+                    let col = 3 * i + c;
+                    D[(row * dim + col) * 2]     = phase_re * R_cart[r][c];
+                    D[(row * dim + col) * 2 + 1] = phase_im * R_cart[r][c];
+                }
+            }
+        }
+
+        return D;
+    }
+
+    /**
+     * Complex matrix-vector multiply: result = M * v
+     * M is dim x dim stored interleaved, v is dim stored interleaved.
+     */
+    _complexMatVec(M, v, dim) {
+        let result = new Array(dim * 2);
+        for (let i = 0; i < dim; i++) {
+            let re = 0, im = 0;
+            for (let j = 0; j < dim; j++) {
+                let m_re = M[(i * dim + j) * 2];
+                let m_im = M[(i * dim + j) * 2 + 1];
+                let v_re = v[j * 2];
+                let v_im = v[j * 2 + 1];
+                re += m_re * v_re - m_im * v_im;
+                im += m_re * v_im + m_im * v_re;
+            }
+            result[i * 2] = re;
+            result[i * 2 + 1] = im;
+        }
+        return result;
+    }
+
+    /**
+     * Complex dot product: <a|b> = sum conj(a_i) * b_i
+     */
+    _complexDot(a, b, dim) {
+        let re = 0, im = 0;
+        for (let i = 0; i < dim; i++) {
+            let a_re = a[i * 2], a_im = a[i * 2 + 1];
+            let b_re = b[i * 2], b_im = b[i * 2 + 1];
+            // conj(a) * b = (a_re - i*a_im)(b_re + i*b_im)
+            re += a_re * b_re + a_im * b_im;
+            im += a_re * b_im - a_im * b_re;
+        }
+        return [re, im];
+    }
+
+    /**
+     * Eigendecomposition of a small NxN complex matrix via QR iteration.
+     * For typical degenerate multiplets N = 2 or 3.
+     * Returns { eigenvalues: [[re,im],...], eigenvectors: [[[re,im],...],...] }
+     * eigenvectors[i] is the i-th eigenvector as array of [re,im] components.
+     */
+    _complexEig(M, n) {
+        if (n === 1) {
+            return {
+                eigenvalues: [M[0][0]],
+                eigenvectors: [[[1, 0]]]
+            };
+        }
+        if (n === 2) {
+            return this._complexEig2x2(M);
+        }
+        // General case: power iteration / direct for small matrices
+        return this._complexEigGeneral(M, n);
+    }
+
+    /**
+     * Analytic eigendecomposition of a 2x2 complex matrix.
+     */
+    _complexEig2x2(M) {
+        let a = M[0][0], b = M[0][1], c = M[1][0], d = M[1][1];
+        // trace = a + d
+        let tr_re = a[0] + d[0], tr_im = a[1] + d[1];
+        // det = a*d - b*c
+        let det_re = (a[0]*d[0] - a[1]*d[1]) - (b[0]*c[0] - b[1]*c[1]);
+        let det_im = (a[0]*d[1] + a[1]*d[0]) - (b[0]*c[1] + b[1]*c[0]);
+        // discriminant = tr^2 - 4*det
+        let disc_re = (tr_re*tr_re - tr_im*tr_im) - 4*det_re;
+        let disc_im = 2*tr_re*tr_im - 4*det_im;
+        // sqrt(disc)
+        let [sqrt_re, sqrt_im] = this._complexSqrt(disc_re, disc_im);
+
+        let eigvals = [
+            [(tr_re + sqrt_re) / 2, (tr_im + sqrt_im) / 2],
+            [(tr_re - sqrt_re) / 2, (tr_im - sqrt_im) / 2]
+        ];
+
+        let eigvecs = [];
+        for (let i = 0; i < 2; i++) {
+            let lambda = eigvals[i];
+            // (A - lambda*I) * v = 0
+            // Use first row: (a - lambda)*v0 + b*v1 = 0
+            // v = [b, lambda - a] (unnormalized)
+            let v0_re = b[0], v0_im = b[1];
+            let v1_re = lambda[0] - a[0], v1_im = lambda[1] - a[1];
+            let norm = Math.sqrt(v0_re*v0_re + v0_im*v0_im + v1_re*v1_re + v1_im*v1_im);
+            if (norm < 1e-15) {
+                // Fallback: use second row
+                v0_re = lambda[0] - d[0]; v0_im = lambda[1] - d[1];
+                v1_re = c[0]; v1_im = c[1];
+                norm = Math.sqrt(v0_re*v0_re + v0_im*v0_im + v1_re*v1_re + v1_im*v1_im);
+            }
+            if (norm < 1e-15) {
+                eigvecs.push([[1, 0], [0, 0]]);
+            } else {
+                eigvecs.push([
+                    [v0_re / norm, v0_im / norm],
+                    [v1_re / norm, v1_im / norm]
+                ]);
+            }
+        }
+
+        return { eigenvalues: eigvals, eigenvectors: eigvecs };
+    }
+
+    /**
+     * General eigendecomposition for NxN complex matrix.
+     * Uses inverse iteration to find eigenvectors after computing eigenvalues
+     * via the characteristic polynomial for small N, or direct iteration.
+     */
+    _complexEigGeneral(M, n) {
+        // For small degenerate multiplets (typically n=3), we use a direct approach:
+        // Find eigenvalues by iterative QR, then eigenvectors by inverse iteration.
+
+        // Since M_D is (approximately) unitary, its eigenvalues lie on the unit circle.
+        // We can find them by diagonalizing M_D using Jacobi-like rotations,
+        // but for simplicity, use a direct power-method approach for each eigenvector.
+
+        let eigvals = [];
+        let eigvecs = [];
+
+        // Work with a copy
+        let A = [];
+        for (let i = 0; i < n; i++) {
+            A[i] = [];
+            for (let j = 0; j < n; j++) {
+                A[i][j] = [M[i][j][0], M[i][j][1]];
+            }
+        }
+
+        // Simple Schur-like iteration: repeatedly find eigenvalue/eigenvector and deflate
+        for (let found = 0; found < n; found++) {
+            let dim = n - found;
+            // Power iteration on current matrix to find dominant eigenvector
+            let v = [];
+            for (let i = 0; i < dim; i++) v[i] = [i === 0 ? 1 : 0, 0];
+
+            let lambda = [0, 0];
+            for (let iter = 0; iter < 200; iter++) {
+                // w = A * v
+                let w = [];
+                for (let i = 0; i < dim; i++) {
+                    let re = 0, im = 0;
+                    for (let j = 0; j < dim; j++) {
+                        re += A[i][j][0] * v[j][0] - A[i][j][1] * v[j][1];
+                        im += A[i][j][0] * v[j][1] + A[i][j][1] * v[j][0];
+                    }
+                    w[i] = [re, im];
+                }
+                // Rayleigh quotient: lambda = <v|w> / <v|v>
+                let num_re = 0, num_im = 0;
+                for (let i = 0; i < dim; i++) {
+                    num_re += v[i][0] * w[i][0] + v[i][1] * w[i][1];
+                    num_im += v[i][0] * w[i][1] - v[i][1] * w[i][0];
+                }
+                lambda = [num_re, num_im];
+                // Normalize w
+                let norm = 0;
+                for (let i = 0; i < dim; i++) norm += w[i][0]*w[i][0] + w[i][1]*w[i][1];
+                norm = Math.sqrt(norm);
+                if (norm < 1e-15) break;
+                for (let i = 0; i < dim; i++) { w[i][0] /= norm; w[i][1] /= norm; }
+                v = w;
+            }
+
+            eigvals.push(lambda);
+
+            // Map back to full space
+            let fullVec = [];
+            // The deflated matrix indices map to the remaining original indices
+            // For simplicity, we track a permutation
+            if (found === 0) {
+                for (let i = 0; i < n; i++) fullVec[i] = i < v.length ? v[i] : [0, 0];
+            } else {
+                for (let i = 0; i < n; i++) fullVec[i] = [0, 0];
+                for (let i = 0; i < dim; i++) {
+                    fullVec[found + i] = v[i];
+                }
+            }
+            eigvecs.push(fullVec);
+
+            if (dim <= 1) break;
+
+            // Deflate: A' = A - lambda * v * v^H (Hotelling deflation)
+            // Actually, for better stability, do a Householder deflation
+            // But for small matrices (n<=3), direct deflation is fine
+            let newA = [];
+            // Build projector P = I - v*v^H, then A' = P*A*P
+            // But simpler: use similarity transform to put v as first column
+            // For now, use simple Wielandt deflation:
+            // A_new[i][j] = A[i][j] - lambda * v[i] * conj(v[j])
+            for (let i = 0; i < dim; i++) {
+                newA[i] = [];
+                for (let j = 0; j < dim; j++) {
+                    // lambda * v[i] * conj(v[j])
+                    let vi_re = v[i][0], vi_im = v[i][1];
+                    let vj_re = v[j][0], vj_im = -v[j][1]; // conj
+                    let prod_re = vi_re * vj_re - vi_im * vj_im;
+                    let prod_im = vi_re * vj_im + vi_im * vj_re;
+                    let lp_re = lambda[0] * prod_re - lambda[1] * prod_im;
+                    let lp_im = lambda[0] * prod_im + lambda[1] * prod_re;
+                    newA[i][j] = [A[i][j][0] - lp_re, A[i][j][1] - lp_im];
+                }
+            }
+            // Reduce dimension by removing the row/col most aligned with v
+            // For simplicity, remove row 0, col 0 after rotating v to e_0
+            // Actually just use the deflated matrix directly
+            A = [];
+            for (let i = 1; i < dim; i++) {
+                A[i - 1] = [];
+                for (let j = 1; j < dim; j++) {
+                    A[i - 1][j - 1] = newA[i][j];
+                }
+            }
+        }
+
+        return { eigenvalues: eigvals, eigenvectors: eigvecs };
+    }
+
+    /**
+     * Complex square root of (a + bi).
+     */
+    _complexSqrt(a, b) {
+        let r = Math.sqrt(a * a + b * b);
+        let re = Math.sqrt((r + a) / 2);
+        let im = (b >= 0 ? 1 : -1) * Math.sqrt((r - a) / 2);
+        return [re, im];
+    }
+
     /**
      * Compute the atom permutation map for a given symmetry operation.
      * Returns an array `mapping` where `mapping[i] = j`, meaning atom `i`
@@ -113773,6 +114430,10 @@ class SymmetryVisualizer {
         this.finalGhostArrows = [];
 
         this.currentMapping = this.getAtomMapping(op);
+        
+        // SYMMETRY ADAPTATION
+        // Compute D-matrix adapted vibrations for the target positions.
+        this.currentAdaptedComponents = this.getAdaptedVibrationComponents(op);
 
         for (let i = 0; i < this.crystal.atompos.length; i++) {
             let eqPos = this.crystal.atompos[i];
@@ -113853,7 +114514,9 @@ class SymmetryVisualizer {
                 
                 // Get atom j that atom i maps to
                 let j = (this.currentMapping && this.currentMapping[i] !== undefined) ? this.currentMapping[i] : undefined;
-                let vibrations_j = j !== undefined ? this.crystal.vibrationComponents[j] : null;
+                
+                // Use ADAPTED vibration components so degenerate bands show cleanly
+                let vibrations_j = j !== undefined ? this.currentAdaptedComponents[j] : null;
                 let vx_j = 0, vy_j = 0, vz_j = 0;
                 if (vibrations_j) {
                     vx_j = snapRe * vibrations_j[0][0] - snapIm * vibrations_j[0][1];
@@ -114143,6 +114806,12 @@ v.update = function(phononweb) {
 };
 // Deactivate symmetry animator when material changes
 p.onMaterialChanged = () => symViz.onMaterialChanged();
+// Auto-close symmetry reference viewer when q-point/mode is changed
+p.onModeChanged = () => {
+    if ($$1('#sym-reference-popup').is(':visible')) {
+        $$1('#sym-reference-close-btn').click();
+    }
+};
 
 // check if webgl is available
 if ( ! Detector.webgl ) {
